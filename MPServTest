@@ -1,0 +1,553 @@
+package macropoint
+
+import (
+	"context"
+	"testing"
+	"time"
+
+	"thriftrw/code.uber.internal/freight/idl-common/requirements"
+	"thriftrw/code.uber.internal/freight/uf-job/job"
+
+	facilityControllerMock "glue/mock/code.uber.internal/freight/uf-supply-locations/controller/facility/controllermock"
+	macropointgwmock "glue/mock/code.uber.internal/freight/uf-supply-locations/gateway/macropoint/gatewaymock"
+
+	ufjobgatewaymock "glue/mock/code.uber.internal/freight/uf-supply-locations/gateway/ufjob/gatewaymock"
+	ufogatewaymock "glue/mock/code.uber.internal/freight/uf-supply-locations/gateway/ufo/gatewaymock"
+	macropointRepo "glue/mock/code.uber.internal/freight/uf-supply-locations/repository/macropoint/repositorymock"
+	"thriftrw/code.uber.internal/data/schemas/basic/datatypes"
+
+	"code.uber.internal/freight/uf-supply-locations/errors"
+	"code.uber.internal/freight/uf-supply-locations/mapper"
+	"code.uber.internal/freight/uf-supply-locations/model"
+	"code.uber.internal/freight/uf-supply-locations/utils"
+
+	unifeedmodel "code.uber.internal/freight/unifeed-client/model"
+	"code.uber.internal/glue/basefactory"
+	"github.com/stretchr/testify/suite"
+	unifeedmodelfactory "glue/factory/code.uber.internal/freight/unifeed-client/modelfactory"
+)
+
+const DatetimeFormat = "2006-01-02T15:04:05"
+
+type (
+	controllerSuite struct {
+		suite.Suite
+		macropointGatewayMock  *macropointgwmock.Mock
+		ufoGatewayMock         *ufogatewaymock.Mock
+		facilityControllerMock *facilityControllerMock.Mock
+		testObj                Controller
+		macropointRepoMock     *macropointRepo.Mock
+		ufJobMock              *ufjobgatewaymock.Mock
+	}
+)
+
+func TestControllerSuite(t *testing.T) {
+	suite.Run(t, &controllerSuite{})
+}
+
+func (s *controllerSuite) SetupTest() {
+	s.macropointGatewayMock = macropointgwmock.New(s.T())
+	s.macropointRepoMock = macropointRepo.New(s.T())
+	s.ufoGatewayMock = ufogatewaymock.New(s.T())
+	s.facilityControllerMock = facilityControllerMock.New(s.T())
+	s.ufJobMock = ufjobgatewaymock.New(s.T())
+
+	s.testObj, _ = New(Params{
+		MacropointRepo:     s.macropointRepoMock.Build(),
+		FacilityController: s.facilityControllerMock.Build(),
+		MacropointGateway:  s.macropointGatewayMock.Build(),
+		UfoGateway:         s.ufoGatewayMock.Build(),
+		UfJobGateway:       s.ufJobMock.Build(),
+	})
+}
+
+func (s *controllerSuite) TestCreateOrderWithoutCarrierUUID() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	carrierUUID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(carrierUUID).
+		ValuePtr()
+	orderParams := model.MacropointOrder{
+		JobUUID:   jobUUID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	orderParamsWithCarrierUUID := model.MacropointOrder{
+		JobUUID:     jobUUID,
+		CarrierUUID: &carrierUUID,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParamsWithCarrierUUID, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithCarrierUUID() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	carrierUUID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(carrierUUID).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:     jobUUID,
+		CarrierUUID: &carrierUUID,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithoutTruckNumber() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	truckNumber := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadTruckNumber).
+		WithNewValue(truckNumber).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:   jobUUID,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	orderParams2 := model.MacropointOrder{
+		JobUUID:     jobUUID,
+		TruckNumber: &truckNumber,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams2, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithTruckNumber() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	truckNumber := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadTruckNumber).
+		WithNewValue(truckNumber).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:     jobUUID,
+		TruckNumber: &truckNumber,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithPickupBusinessFacility() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	facility := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypePickupBusinessFacility).
+		WithNewValue(facility).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:                    jobUUID,
+		PickupBusinessFacilityUUID: &facility,
+		CreatedAt:                  time.Now(),
+		UpdatedAt:                  time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithDropoffBusinessFacility() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	facility := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeDropoffBusinessFacility).
+		WithNewValue(facility).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:                     jobUUID,
+		DropoffBusinessFacilityUUID: &facility,
+		CreatedAt:                   time.Now(),
+		UpdatedAt:                   time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithPickupStartTime() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	pickupTime := time.Now()
+	pickupStartTime := utils.StringToPointer(pickupTime.UTC().Format(DatetimeFormat))
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadScheduledSourceStartTime).
+		WithNewValue(*pickupStartTime).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:         jobUUID,
+		PickupStartTime: &pickupTime,
+		CreatedAt:       time.Now(),
+		UpdatedAt:       time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithPickupEndTime() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	pickupTime := time.Now()
+	pickupEndTime := utils.StringToPointer(pickupTime.UTC().Format(DatetimeFormat))
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadScheduledSourceEndTime).
+		WithNewValue(*pickupEndTime).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:       jobUUID,
+		PickupEndTime: &pickupTime,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithDropoffStartTime() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	dropoffTime := time.Now()
+	dropoffStartTime := utils.StringToPointer(dropoffTime.UTC().Format(DatetimeFormat))
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadScheduledDestinationStartTime).
+		WithNewValue(*dropoffStartTime).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:          jobUUID,
+		DropoffStartTime: &dropoffTime,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) TestCreateOrderWithDropoffEndTime() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	dropoffTime := time.Now()
+	dropoffEndTime := utils.StringToPointer(dropoffTime.UTC().Format(DatetimeFormat))
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadScheduledDestinationEndTime).
+		WithNewValue(*dropoffEndTime).
+		ValuePtr()
+
+	orderParams := model.MacropointOrder{
+		JobUUID:        jobUUID,
+		DropoffEndTime: &dropoffTime,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+	s.testCreateOrder(ctx, jobUUID, orderParams, orderParams, event)
+}
+func (s *controllerSuite) TestCreateOrderCarrierUUIDNilEvent() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(utils.ZeroStr).
+		ValuePtr()
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().Error(err)
+}
+
+func (s *controllerSuite) TestCreateOrderPickupEndTimeEmptyEvent() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadScheduledSourceEndTime).
+		WithNewValue(utils.ZeroStr).
+		ValuePtr()
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().Error(err)
+}
+
+func (s *controllerSuite) TestCreateOrder_OrderNotCreated() {
+
+	ctx := context.Background()
+
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(testJobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(testCarrierUUID).
+		ValuePtr()
+
+	orderParams := getMacropointOrderData()
+
+	pickupAddr := getPickupAddrData()
+	dropoffAddr := getDropoffAddrData()
+
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, testJobUUID).Return(orderParams, nil)
+	orderParams.CarrierUUID = &testCarrierUUID
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().With(ctx, testJobUUID, &orderParams).Return(nil)
+
+	s.facilityControllerMock.Let().FetchBusinessFacilityAddr().With(ctx, datatypes.UUID(*orderParams.PickupBusinessFacilityUUID)).Return(&pickupAddr, nil)
+	s.facilityControllerMock.Let().FetchBusinessFacilityAddr().With(ctx, datatypes.UUID(*orderParams.DropoffBusinessFacilityUUID)).Return(&dropoffAddr, nil)
+	s.ufoGatewayMock.Let().FetchDotNumber().With(ctx, testCarrierUUID).Return(&testDotNumber, nil)
+
+	job := job.Job{
+		UUID:       datatypes.UUID(testJobUUID),
+		Identifier: testJobUUID,
+		Requirements: &requirements.Requirements{
+			EquipmentRequirements: &requirements.EquipmentRequirements{
+				Equipment: &requirements.EquipmentRequirement{
+					Type: requirements.EquipmentTypeVan,
+				},
+			},
+		},
+	}
+	s.ufJobMock.Let().ReadJob().With(ctx, testJobUUID).Return(&job, nil)
+
+	orderReq := getMacroPointOrderRequestTestData()
+	orderRes := getCreateOrderResponse()
+	s.macropointGatewayMock.Let().CreateOrder().With(ctx, orderReq).Return(orderRes, nil)
+
+	order := getMacropointOrderData()
+	order.CarrierUUID = &testCarrierUUID
+	order.OrderID = &orderRes.OrderID
+	order.TrackingRequestID = &orderRes.TrackingRequestID
+
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().With(ctx, testJobUUID, &order).Return(nil)
+
+	err := s.testObj.RegisterTracking(ctx, event)
+
+	s.Assert().NoError(err)
+}
+
+func (s *controllerSuite) testCreateOrder(ctx context.Context,
+	jobUUID string,
+	readByJobUUIDRtnOrderParams model.MacropointOrder,
+	createOrUpdateOrderParams model.MacropointOrder,
+	event *unifeedmodel.UnifeedEvent) {
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, jobUUID).Return(readByJobUUIDRtnOrderParams, nil)
+
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().
+		When(func(_ context.Context, jobUUIDArg string, params *model.MacropointOrder) bool {
+			params.CreatedAt = createOrUpdateOrderParams.CreatedAt
+			params.UpdatedAt = createOrUpdateOrderParams.UpdatedAt
+			params.PickupStartTime = createOrUpdateOrderParams.PickupStartTime
+			params.PickupEndTime = createOrUpdateOrderParams.PickupEndTime
+			params.DropoffStartTime = createOrUpdateOrderParams.DropoffStartTime
+			params.DropoffEndTime = createOrUpdateOrderParams.DropoffEndTime
+			return s.Equal(jobUUID, jobUUIDArg) &&
+				s.Equal(createOrUpdateOrderParams, *params)
+		}).
+		Return(nil)
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().NoError(err)
+}
+
+func (s *controllerSuite) TestCreateOrderfailure() {
+	ctx := context.Background()
+	jobUUID := ""
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue("").
+		ValuePtr()
+	orderParams := model.MacropointOrder{}
+
+	s.testCreateOrderfailure(ctx, jobUUID, orderParams, orderParams, event)
+
+}
+
+func (s *controllerSuite) testCreateOrderfailure(
+	ctx context.Context,
+	jobUUID string,
+	readByJobUUIDRtnOrderParams model.MacropointOrder,
+	createOrUpdateOrderParams model.MacropointOrder,
+	event *unifeedmodel.UnifeedEvent) {
+
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, jobUUID).Return(readByJobUUIDRtnOrderParams, errors.New(errors.InternalError, ""))
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().With(ctx, jobUUID, &createOrUpdateOrderParams).Return(errors.New(errors.InternalError, ""))
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().Error(err)
+}
+
+func (s *controllerSuite) TestChangeOrderGatewaySuccess() {
+	ctx := context.Background()
+	facility := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(testJobUUID).
+		WithEventType(mapper.UnifeedEventTypePickupBusinessFacility).
+		WithNewValue(facility).
+		ValuePtr()
+
+	orderRes := getChangeOrderResponse()
+	orderParams := getMacropointOrderData()
+	orderParams.CarrierUUID = &testCarrierUUID
+	orderParams.OrderID = &orderRes.OrderID
+	orderParams.TrackingRequestID = &orderRes.TrackingRequestID
+
+	pickupAddr := getPickupAddrData()
+	dropoffAddr := getDropoffAddrData()
+
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, testJobUUID).Return(orderParams, nil)
+	orderParams.PickupBusinessFacilityUUID = &facility
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().With(ctx, testJobUUID, &orderParams).Return(nil)
+
+	s.facilityControllerMock.Let().FetchBusinessFacilityAddr().With(ctx, datatypes.UUID(*orderParams.PickupBusinessFacilityUUID)).Return(&pickupAddr, nil)
+	s.facilityControllerMock.Let().FetchBusinessFacilityAddr().With(ctx, datatypes.UUID(*orderParams.DropoffBusinessFacilityUUID)).Return(&dropoffAddr, nil)
+	s.ufoGatewayMock.Let().FetchDotNumber().With(ctx, testCarrierUUID).Return(&testDotNumber, nil)
+
+	orderReq := getMacroPointChangeOrderRequestTestData()
+	order := getMacropointOrderData()
+
+	order.OrderID = &orderRes.OrderID
+	order.TrackingRequestID = &orderRes.TrackingRequestID
+	order.PickupBusinessFacilityUUID = &facility
+	order.CarrierUUID = &testCarrierUUID
+
+	s.macropointGatewayMock.Let().ChangeOrder().With(ctx, *order.OrderID, orderReq).Return(orderRes, nil)
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().With(ctx, testJobUUID, &order).Return(nil)
+
+	job := job.Job{
+		UUID:       datatypes.UUID(testJobUUID),
+		Identifier: testJobUUID,
+		Requirements: &requirements.Requirements{
+			EquipmentRequirements: &requirements.EquipmentRequirements{
+				Equipment: &requirements.EquipmentRequirement{
+					Type: requirements.EquipmentTypeVan,
+				},
+			},
+		},
+	}
+	s.ufJobMock.Let().ReadJob().With(ctx, testJobUUID).Return(&job, nil)
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().NoError(err)
+}
+
+func (s *controllerSuite) TestStopOrderGatewaySuccess() {
+	ctx := context.Background()
+	carrierUUIDNew := basefactory.String()
+	orderID := basefactory.String()
+	trackingRequestID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(testJobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(carrierUUIDNew).
+		ValuePtr()
+	orderParams := model.MacropointOrder{
+		JobUUID:           testJobUUID,
+		CarrierUUID:       &testCarrierUUID,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+		OrderID:           &orderID,
+		TrackingRequestID: &trackingRequestID,
+	}
+
+	s.macropointGatewayMock.Let().StopOrder().With(ctx, *orderParams.OrderID).Return(nil)
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, testJobUUID).Return(orderParams, nil)
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().
+		When(func(_ context.Context, jobUUIDArg string, params *model.MacropointOrder) bool {
+			params.CreatedAt = orderParams.CreatedAt
+			params.UpdatedAt = orderParams.UpdatedAt
+			params.PickupStartTime = orderParams.PickupStartTime
+			params.PickupEndTime = orderParams.PickupEndTime
+			params.DropoffStartTime = orderParams.DropoffStartTime
+			params.DropoffEndTime = orderParams.DropoffEndTime
+			params.OrderID = orderParams.OrderID
+			params.TrackingRequestID = orderParams.TrackingRequestID
+			params.CarrierUUID = orderParams.CarrierUUID
+			return s.Equal(testJobUUID, jobUUIDArg) &&
+				s.Equal(orderParams, *params)
+		}).
+		Return(nil)
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().NoError(err)
+}
+
+func (s *controllerSuite) TestCreateOrderWhenNoJobUUID() {
+	ctx := context.Background()
+	emptyJobUUID := ""
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(emptyJobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(testCarrierUUID).
+		ValuePtr()
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().Error(err)
+
+}
+
+func (s *controllerSuite) TestStopOrderGatewayfailure() {
+	ctx := context.Background()
+	jobUUID := basefactory.String()
+	carrierUUID := basefactory.String()
+	orderID := basefactory.String()
+	trackingRequestID := basefactory.String()
+	event := unifeedmodelfactory.BuildUnifeedEvent().
+		WithEntityUUID(jobUUID).
+		WithEventType(mapper.UnifeedEventTypeLoadCarrierUUID).
+		WithNewValue(carrierUUID).
+		ValuePtr()
+	orderParams := model.MacropointOrder{
+		JobUUID:           jobUUID,
+		CarrierUUID:       &carrierUUID,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         time.Now(),
+		OrderID:           &orderID,
+		TrackingRequestID: &trackingRequestID,
+	}
+
+	s.macropointGatewayMock.Let().StopOrder().With(ctx, *orderParams.OrderID).Return(errors.New(errors.InternalError, ""))
+	s.macropointRepoMock.Let().ReadbyjobUUID().With(ctx, jobUUID).Return(orderParams, nil)
+	s.macropointRepoMock.Let().CreateOrUpdateOrder().
+		When(func(_ context.Context, jobUUIDArg string, params *model.MacropointOrder) bool {
+			params.CreatedAt = orderParams.CreatedAt
+			params.UpdatedAt = orderParams.UpdatedAt
+			params.PickupStartTime = orderParams.PickupStartTime
+			params.PickupEndTime = orderParams.PickupEndTime
+			params.DropoffStartTime = orderParams.DropoffStartTime
+			params.DropoffEndTime = orderParams.DropoffEndTime
+			params.OrderID = orderParams.OrderID
+			params.TrackingRequestID = orderParams.TrackingRequestID
+			return s.Equal(jobUUID, jobUUIDArg) &&
+				s.Equal(orderParams, *params)
+		}).
+		Return(nil)
+
+	err := s.testObj.RegisterTracking(ctx, event)
+	s.Assert().Error(err)
+}
