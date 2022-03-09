@@ -1,0 +1,52 @@
+package macropoint
+
+import (
+	"context"
+
+	"code.uber.internal/freight/uf-supply-locations/gateway/ufjob"
+
+	"code.uber.internal/freight/uf-supply-locations/controller/facility"
+	macropointgw "code.uber.internal/freight/uf-supply-locations/gateway/macropoint"
+	"code.uber.internal/freight/uf-supply-locations/gateway/ufo"
+	"code.uber.internal/freight/uf-supply-locations/repository/macropoint"
+	"code.uber.internal/freight/unifeed-client/model"
+	"go.uber.org/fx"
+)
+
+type (
+	// Controller -
+	Controller interface {
+		// RegisterTracking -
+		RegisterTracking(ctx context.Context, event *model.UnifeedEvent) error
+	}
+
+	controller struct {
+		macropointRepo     macropoint.Repository
+		facilityController facility.Controller
+		macropointGateway  macropointgw.Gateway
+		ufoGateway         ufo.Gateway
+		ufjobGateway       ufjob.Gateway
+	}
+
+	// Params -
+	Params struct {
+		fx.In
+
+		MacropointRepo     macropoint.Repository
+		FacilityController facility.Controller
+		MacropointGateway  macropointgw.Gateway
+		UfoGateway         ufo.Gateway
+		UfJobGateway       ufjob.Gateway
+	}
+)
+
+// New -
+func New(p Params) (Controller, error) {
+	return &controller{
+		macropointRepo:     p.MacropointRepo,
+		facilityController: p.FacilityController,
+		macropointGateway:  p.MacropointGateway,
+		ufoGateway:         p.UfoGateway,
+		ufjobGateway:       p.UfJobGateway,
+	}, nil
+}
