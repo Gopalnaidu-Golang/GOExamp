@@ -1,0 +1,1468 @@
+
+ Public
+ENVIRONMENT
+No Environment
+LAYOUT
+Double Column
+LANGUAGE
+cURL
+DESCARTES MACROPOINT VISIBILITY CUSTOMER INTERGRATIONS
+Introduction
+API Integration
+Flat File Integration
+Descartes MacroPoint Best Practice Procedures
+Descartes MacroPoint Visibility Customer Intergrations
+Descartes MacroPoint provides multiple options to create a functional and robust integration maximizing scalability and value. The API or SFTP/FTPS Integrations power the Descartes MacroPoint Visibility product.
+
+Documentation for the API and Flat File integrations can be found on the left side under the designated folder.
+
+All Descartes MacroPoint APIs are RESTful with calls being made to the base domain: https://macropoint-lite.com/api/1.0/orders/
+
+CSV Import Files need to be transmitted via secure SFTP or FTPS connections
+
+API Integration
+Available Customer to Descartes MacroPoint APIs:
+Endpoint Name	Description	Request Type
+Create Order	Create new tracking sessions	POST
+Change Order	Edit/Change existing tracking sessions. Requires either the MPOrderID or MPTrackingRequestID received from the successful Create Order request to be provided in the endpoint URL	POST
+Stop Order	Stop/Cancel existing tracking sessions. Requires either the MPOrderID or MPTrackingRequestID received from the successful Create Order request to be provided in the endpoint URL	POST
+Order Hyperlink	Receive a unqiue URL for an individual tracking session to view tracking details and a map with or without a direct login	POST
+Partner Status	Identify if a carrier is partnered to a specified customer account and identify carrier integration method	GET
+Available Descartes MacroPoint to Customer APIs:
+Endpoint Name	Description	Request Type	Endpoint URL
+Location Updates	Provides location pings during the life of the tracking session	GET	Endpoint established by Customer
+Order Statuses	Descartes MacroPoint tracking statuses	GET	Endpoint established by Customer
+Trip Events	Arrival and Departure notifications	GET	Endpoint established by Customer
+Schedule Alerts	ETA messages to alert if a load is on track or not	GET	Endpoint established by Customer
+Enhanced Shipment	Status for LTL and Ocean tracking shipments	GET	Endpoint established by Customer
+Customer to Descartes MacroPoint Endpoints
+The Customer to Descartes MacroPoint endpoints allow a customer to Create Orders, Change Orders, and Stop Orders within Descartes MacroPoint from their TMS/ERP system
+
+POSTCreate Order
+https://macropoint-lite.com/api/1.0/orders/createorder
+Create Order API request allows customers to Create Tracking Sessions or Tracking Requests
+STANDARD PROCESS FLOW CHART:
+
+
+Request Structure
+Title	Description
+HTTP Method	POST
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+Create Order Elements
+View More
+Element	Description	Required
+TrackVia	Captures details of the Driver, Truck, or Trailer for tracking purposes. Mobile, VehicleID, and/or TrailerID can be supplied in a Create Order Request.
+
+If the TrackVia is not completed, a Tracking Request will be sent to the Carrier to provide the needed details to track the order.
+
+For LTL shipments, LTL PRO must be supplied.
+
+For Ocean shipments, the Container Number must be supplied. Ocean Tracking Request	No
+TrackStartDateTime	Specified date and time Descartes MacroPoint starts tracking	Yes
+Reference Information	Captures key references for Ocean Shipments	No
+Notifications	Identifies the track duration, ping frequency, where notifications are sent within Descartes MacroPoint, and custom User Defined Fields on the order	Yes
+Cold Chain	Temperature tracking settings including max/min thresholds	No
+Carrier	Captures the specified Carrier on the load	Yes
+Vehicle	Captures the specified vehicle type on the load	Yes
+TripSheet	Captures stop details on a load	Yes
+ScheduleAlerts	Provides ability to customize ETA calculation by adjusting the maximum allowable driving hours per day on a specified load	No
+EmailCopiesOfUpdatesTo	Ability to assign an email address to a specified order for email notifications to be delivered	No
+Notes	Notes at the Order level	No
+TrackVia Tags
+Tag Name	Description	Example	Required
+Mobile	Driver's mobile number that is moving the specified load. Phone Number cannot include any spaces or special characters	5555555555	No
+VehicleID	Truck number. Carrier must have ELDs integrated to be supported	123	No
+TrailerID	Trailer number. Carrier must have trailer GPS units integrated to be supported	456789	No
+LTLPRO	LTL Carrier PRO Number	123456	No
+ContainerNumber	Ocean Container Number	TCLU4664990	No
+TrackVia International Mobile Number Tag
+A Country Code is required for tracking any mobile phone that is not a United States number
+
+Tag Name	Description	Example	Required
+Mobile CountryCode	Identifies country of origin of mobile device	CountryCode="MEX"	No
+Acceptable Country Codes
+
+Note: In compliance with GDPR regulations, customers must receive consent from drivers to submit European phone numbers for tracking
+
+Example Format:
+
+    {{mobile}}
+
+TrackVia VehicleID Specfiy Telematics Provider Tag
+A provider is required if a carrier utilizes mulitple telematics providers in their fleet
+
+Tag Name	Description	Example	Required
+VehicleID Provider	Specific telematics provider to track vehicle ID	Provider="samsara"	No
+Example Format:
+
+{{vehicleID}}
+
+TrackStartDateTime Tags
+Tag Name	Description	Example	Required
+TrackStartDateTime	The date/time to start the tracking session. Hours are captured in 24 hour time. Format: YYYY-MM-DD{Space}HH:MM{Space}Time Zone	2020-01-01 12:00 ET
+Acceptable Time Zone Values	Yes
+Reference Information Tags
+Tag Name	Description	Example	Required
+BillOfLadingNumber	Ocean Bill of Lading Number	ONEYSH1ABP795700	No
+CarrierBookingNumber	Ocean Carrier Booking Number	987654	No
+SCAC	Ocean Carrier SCAC	ABCD	No
+Note: Either the Ocean Bill of Lading Number or the Carrier Booking Number and Carrier SCAC are required to track Ocean Shipments
+
+Notifications Tags
+View More
+Tag Name	Description	Example	Required
+PartnerMPID	The Descartes MacroPoint generated ID that denotes the account(s) that will receive notifications from the tracking session	1234567	Yes
+IDNumber	Unique shipment level identifier. Customer reference number shared between customer and carrier	Load-123	Yes
+TrackDurationInHours	Duration of the tracking session in hours. Maximum value denoted in contract	24	Yes
+TrackIntervalInMinutes	Ping frequency of the shipment in minutes. Value specified in contract	30	Yes
+CustomerUDFData	Unique data fields (Keys) to display and search in Descartes MacroPoint’s Control Tower. Fields (Keys) must be defined and enabled within Descartes MacroPoint prior to being sent on the Create Order request. Up to 10 unique fields (Keys) accepted, unlimited values	Key=UDF Field 1
+Value=123	No
+PostOverrideMPID	Second MPID utilized to return tracking data. Typically used to returned data to seaprated endpoints for specific shipments	9876543	No
+Cold Chain Tags
+View More
+Tag Name	Description	Example	Required
+ZoneNumber	Identification of temperature zone. If single temp on whole trailer, use "1"	1	Yes
+ZoneName	Name of zone	Meat	Yes
+SetTemperature	Desired temperature of shipment	13	No
+TempType	Celsius or Fahrenheit	Fahrenheit	No
+MaxTemperature	Maximum temperature threshold used for alerting	31	Yes
+MinTemperature	Minimum temperature threshold used for alerting	0	Yes
+ConsecutiveMissesThreshold	Number of temperature updates outside of threshold prior to alert being sent	0	No
+Carrier Tags
+Tag Name	Description	Example	Required
+Name	Name of the Carrier on the load	ABC Carrier	Yes
+CarrierID	Internal code to identify carrier	ABCC	Yes
+NotifyCarrier	If ‘True’, a carrier will be tagged on the shipment and able to view the tracking details in their own Descartes MacroPoint account. If ‘False’, the carrier will not be notified of the tracking request. If no value is sent, Descartes MacroPoint assumes ‘True’	'True' or 'False'	No
+Vehicle Tags
+Tag Name	Description	Example	Required
+Type	Type of Vehicle used on the load
+Acceptable vehicle types: DryVan, Refrigerated, Flatbed, Tanker, StraightTruck, Drayage	DryVan	Yes
+TripSheet Tags
+Tag Name	Overview	Example	Required
+StopSequencingRequired	If ‘True’, requries Descartes MacroPoint to capture Trip Events and report Schedule Alerts in sequential order of stops on the tracking session. If not passed, Company Preferences default will be used	True or False	No
+Stops	Stop details on a load including stop type, address, pickup/delivery times	Reference: TripSheet Stop Nodes	Yes
+TripSheet Stop Nodes
+View More
+Tag Name	Description	Example	Required
+Name	Name assigned to Stop	Stop 1	Yes
+StopType	Type of stop; acceptable notations: 'Pickup' or 'DropOff'	Pickup	Yes
+Address	Individual stop address details. Reference TripSheet Stop Address Nodes	Reference below	Yes
+Latitude	Latitude decimal degrees of stop. If provided, the Lat/Long will override the geofence of the address provided	41.396900	No
+Longitude	Longitude decimal degrees of stop. If provided, the Lat/Long will override the geofence of the address provided	-81.662490	No
+StartDateTime	Earliest date/time a driver should arrive at a stop, can be an appointment time or window if EndDateTime differs. Timestamp processed as 24 hour UTC time formatting. Acceptable Formats is: YYYY-MM-DDTHH:MMZ, YYYY-MM-DDThh:mm:ssZ (Z or +hh:mm or -hh:mm)	2020-01-01T12:00:00Z
+2020-01-01T12:00:00+05:00	Yes
+EndDateTime	Latest date/time a driver should arrive at a stop, can be an appointment time or window if EndDateTime differs. Timestamp processed as 24 hour UTC time formatting. Acceptable Formats is: YYYY-MM-DDTHH:MMZ, YYYY-MM-DDThh:mm:ssZ (Z or +hh:mm or -hh:mm)	2020-01-01T12:00:00Z
+2020-01-01T12:00:00-05:00	Yes
+GeofenceInMiles	Allows customer to pass in by stop the radius geofence in miles. If not provided, company preference default will apply	5	No
+SequenceNumber	If StopSequencingRequired is 'True', provide the stop sequence number	1	No
+StopID	Unique value to assign a stop, typically a customer ID/Number	123	Yes
+Notes	Notes assigned to a stop level, viewable in Control Tower	Note details	No
+LastStopEventCompleted	Allows customer to report if a stop event has already occurred, acceptable notations: 'Arrived' or 'Departed'	Arrived or Departed	No
+TripSheet Stop Address Nodes
+Tag Name	Description	Example	Required
+Line1	Address line 1 details	123 North Street	Yes
+Line2	Address line 2 details	Suite 1	No
+City	City name of address	Independence	Yes
+StateOrProvince	State name of address. Acceptable formatting: state abbreviation	OH	Yes
+PostalCode	Postal code of address. 5 and 9 digit postal codes accepted	44131	Yes
+Country	Country of address. Acceptable formatting: country abbreviations (US, USA)
+Acceptable Country Codes	USA	Yes
+ScheduleAlerts Tag
+Tag Name	Description	Example	Required
+MaximumAllowableDrivingHoursPerDay	Alters the ETA calculation for the shipment. This is typically utilized for team shipments. If not provided, company preference default will apply	22	No
+EmailCopiesOfUpdatesTo Tag
+Tag Name	Description	Example	Required
+EmailCopiesOfUpdatesTo	Provides the ability to assign multiple email address to a specific order for email notifications to be delivered. Multiple email addresses to be separated by comma	test@test.com
+test@test.com,test2@test.com	No
+Notes Tag
+Tag Name	Description	Example	Required
+Notes	Custom notes that are displayed in the Control Tower and notification emails at the order level	Test Order Notes	No
+Create Order Responses
+Response type	Response Code	Description
+Success	201	Order created successfully in Descartes MacroPoint
+Failure	400	Bad Request
+Failure	401	Unauthorized
+Failure	1000	All argument/domain-rule validation exceptions
+Failure	1001	Insufficient Funds
+Failure	1003	Phone on do not contact list
+Failure	1009	Custom text indicating that validation URL was unavailable
+Failure	3001	Customer UDF Key not valid
+Failure	9999	Unexpected error occurred - Administrator notified
+Response Example:
+Response 201
+    Success
+    FB93D3FE546749F5A3385D1E2961A12B
+    A04EE941BEC446419749D8433885C654
+
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+BODYraw
+View More
+<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="Mobile">{CellNumber}</Number>
+        <Number Type="VehicleID">{VehicleNumber}</Number>
+        <Number Type="TrailerID">{TrailerNumber}</Number>
+        <Number Type="LTLPRO">{LTLPRONumber}</Number>
+        <Number Type="ContainerNumber">{ContainerNumber}</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+    <ReferenceInformation>
+        <Reference Type="BillofLadingNumber">{BOLNumber}</Reference>
+
+
+Create Order - FTL
+Example Request
+View More
+curl --location --request POST 'https://macropoint-lite.com/api/1.0/orders/createorder' \
+--header 'Content-Type: application/xml' \
+--data-raw '<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="Mobile">5555555555</Number>
+        <Number Type="VehicleID">123</Number>
+        <Number Type="TrailerID">456789</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+    <ReferenceInformation></ReferenceInformation>
+    <Notifications>
+Example Response
+201 Created
+BodyHeader
+(6)
+<?xml version="1.0" encoding="utf-8"?>
+<OrderResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Status>Success</Status>
+    <OrderID>FB93D3FE546749F5A3385D1E2961A12B</OrderID>
+    <TrackingRequestID>A04EE941BEC446419749D8433885C654</TrackingRequestID>
+    <Errors/>
+</OrderResult>
+POSTChange Order
+https://macropoint-lite.com/api/1.0/orders/changeorder/{OrderID/TrackingRequestID}
+Change Order API Request allows customers to edit certain fields on the tracking requests
+When posting a Change Order, either the OrderID or TrackingRequestID provided by Descartes MacroPoint on the original Create Order success message must be used in the URL of the Change Order request
+
+The OrderID or TrackingRequestID can be used interchangeably to make Change Order requests
+
+A complete XML must be submitted on the order, partial calls are not accepted. Tags that are not supported still need to be passed with populated data from the Create Order request
+
+Standard Change Order Process Flow Chart:
+
+
+Request Structure
+Title	Description
+HTTP Method	POST
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+Change Order Elements that can be updated in the Change Order request
+Element	Available Changes
+TrackVia	Mobile Number changes, VehicleID changes, TrailerID changes
+TrackStartDateTime	Adjust the TrackStartDateTime, this is only available if the tracking session has not started
+Notifications	Adjust the track duration and interval times if an order has not started to track
+Adjust User Defined Fields
+Vehicle	Adjust the vehicle type
+TripSheet	Adjust address and appointment times
+EmailCopiesOfUpdatesTo	Ability to adjust or assign an email address to a specified order for email notifications to be delivered
+Notes	Ability to adjust or add Notes at the order level
+Unacceptable Changes Overview
+View More
+Element	Tag Name	Notes
+Notification	PartnerMPID	The Descartes MacroPoint ID cannot be changed on a Change Order request
+Notification	IDNumber	The Load Identifier cannot be changed on a Change Order request
+Notification	TrackDurationInHours	The track duration cannot be changed on a order once the tracking sessions has started
+Notification	TrackIntervalInMinutes	The track interval cannot be changed once the tracking session has started
+Carrier	Carrier Name	If a new Carrier needs to be assigned to a order, a Stop Order request must be submitted and a new Create Order request sent with the updated CarrierID
+Carrier	CarrierID	If a new Carrier needs to be assigned to a order, a Stop Order request must be submitted and a new Create Order request sent with the updated CarrierID
+Carrier	Notify Carrier	If a new Carrier needs to be assigned to a order, a Stop Order request must be submitted and a new Create Order request sent with the updated CarrierID
+TripSheet	StopSequencingRequired	Stop Sequencing cannot be updated in a change order
+Stop	SequenceNumber	Stop Sequencing cannot be updated in a change order
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+BODYraw
+View More
+<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="Mobile">{CellNumber}</Number>
+        <Number Type="VehicleID">{VehicleNumber}</Number>
+        <Number Type="TrailerID">{TrailerNumber}</Number>
+        <Number Type="LTLPRO">{LTLPRONumber}</Number>
+        <Number Type="ContainerNumber">{ContainerNumber}</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+    <ReferenceInformation>
+        <Reference Type="BillofLadingNumber">{BOLNumber}</Reference>
+
+
+Example Request
+Change Order
+View More
+curl --location -g --request POST 'https://macropoint-lite.com/api/1.0/orders/changeorder/{OrderID/TrackingRequestID}' \
+--header 'Content-Type: application/xml' \
+--data-raw '<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="Mobile">{CellNumber}</Number>
+        <Number Type="VehicleID">{VehicleNumber}</Number>
+        <Number Type="TrailerID">{TrailerNumber}</Number>
+        <Number Type="LTLPRO">{LTLPRONumber}</Number>
+        <Number Type="ContainerNumber">{ContainerNumber}</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+POSTStop Order
+https://macropoint-lite.com/api/1.0/orders/stoporder/{OrderID/TrackingrequestID}
+Stop Order API Request allows customers to Cancel Orders or Tracking Requests
+Orders that have been created but are not yet tracking will be removed from Descartes MacroPoint's website if a Stop Order request is sent
+
+Orders that have been created and are tracking will be moved to 'Stopped By Creator' status
+
+Stop Order Standard Process Flow Chart:
+
+
+Request Structure
+Title	Description
+HTTP Method	POST
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+Requires either the OrderID or TrackingRequestID received from the successful Create Order request to be provided in the Endpoint URL
+Example:
+
+https://macropoint-lite.com/api/1.0/orders/stoporder/FB93D3FE546749F5A3385D1E2961A12B
+
+The Stop Order response does not provide any data, only a '200 OK' status will be returned
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+
+
+Example Request
+Stop Order Request
+curl --location --request POST 'https://macropoint-lite.com/api/1.0/orders/stoporder/7C915EA32EA349FCBDBCB3E2F0506D9' \
+--header 'Content-Type: application/xml' \
+--data-raw ''
+Example Response
+Stop Order Response - 200 OK
+BodyHeader
+(5)
+No response body
+This request doesn't return a response body
+POSTOrder Hyperlink
+https://macropoint-lite.com/api/1.0/tms/data/tmsgateway
+The Order Hyperlink allows customers to receive a URL to view tracking details for a specified shipment
+The URL received in the response can be embedded in the customers TMS/ERP
+
+Data accessible via the URL with or without a direct login to Descartes MacroPoint-Lite. Permissions are configurable on the account settings
+
+Request Structure
+Title	Description
+HTTP Method	POST
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+Order Hyperlink Tags
+Title	Description	Example	Required
+ResourceType	This must always be populated as OrderDetail	OrderDetail	Yes
+Identifier	This can be the unique IDNumber that was supplied on the Create Order request, the Descartes MacroPoint generated OrderID, or Descartes MacroPoint TrackingRequestID from a successful Create Order request	Load-123
+424C9CCF68C34DBBA40F017A11DB92BE	Yes
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+BODYraw
+<TMSResourceRequest xmlns="http://macropoint-lite.com/xml/1.0">
+ <ResourceType>OrderDetail</ResourceType> 
+ <Identifier>{ID}</Identifier> 
+</TMSResourceRequest>
+
+
+Example Request
+Order Hyperlink Example
+curl --location --request POST 'https://macropoint-lite.com/api/1.0/tms/data/tmsgateway' \
+--header 'Content-Type: application/xml' \
+--data-raw '<TMSResourceRequest xmlns="http://macropoint-lite.com/xml/1.0">
+ <ResourceType>OrderDetail</ResourceType> 
+ <Identifier>{ID}</Identifier> 
+</TMSResourceRequest>'
+Example Response
+Order Hyderlink Successful Response - 201
+BodyHeader
+(6)
+<?xml version="1.0" encoding="utf-8"?>
+<TMSResourceResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <BaseUrl>https://MacroPoint-Lite.com</BaseUrl>
+    <ResourceQuery>Gateway.aspx?Token=ec8413c0-f5f5-4cc2-9446-ab7da34ec56&amp;Resource=OrderDetail</ResourceQuery>
+    <FullUrl>https://MacroPoint-Lite.com/Gateway.aspx?Token=e8413c0-f5f5-4cc2-9446-ab97da34ec56&amp;Resource=OrderDetail</FullUrl>
+    <Errors/>
+</TMSResourceResult>
+GETPartner Status
+https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/test123
+The Partner Status request is used to provide associated carrier details for the specified customer
+A successful response will only be provided if the carrier is correctly partnered to the Customer in Descartes MacroPoint-Lite which includes the CarrierID code being present
+
+A successful response will include the following:
+Carrier Account Name in Descartes MacroPoint
+
+Carrier MPID
+
+Carrier Connection Method (TMS, ELD, Trailer GPS, Cell Phone, Blank denotes the carrier is partnered without a data source)
+
+Carrier Connection Label. Provides details on how the load is tracked by carrier including but not limited to: Load ID, Truck #, Trailer #, Vehicle ID
+
+Request Structure
+Title	Description
+HTTP Method	GET
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+EXAMPLE REQUEST:
+https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/Test1
+
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+
+
+Example Request
+Partner Status Example
+curl --location -g --request GET 'https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/{PartnerCode}' \
+--header 'Content-Type: application/xml' \
+--data-raw ''
+Example Response
+200 OK
+BodyHeader
+(6)
+View More
+<?xml version="1.0" encoding="utf-8"?>
+<PartnerResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Status>Success</Status>
+    <PartnerStatuses>
+        <PartnerStatus>
+            <Partnered>Yes</Partnered>
+            <AccountName>Test Carrier</AccountName>
+            <AccountNameMPID>1234567</AccountNameMPID>
+            <DOT/>
+            <OperatingAuthorityNumbers/>
+            <PartnerCodes>
+GETGood Truck API
+https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/{CarrierID}
+The Good Truck API is an add on to our existing Partner Status API
+A successful response will only be provided if the Good Truck API is enabled to your MacroPoint account and the carrier is correctly partnered to the Customer in Descartes MacroPoint-Lite which includes the CarrierID code being present
+
+A successful response will include the following:
+Carrier Account Name in Descartes MacroPoint
+
+Carrier MPID
+
+Carrier Connection Method (TMS, ELD, Trailer GPS, Cell Phone, Blank denotes the carrier is partnered without a data source)
+
+Carrier Connection Label. Provides details on how the load is tracked by carrier including but not limited to: Load ID, Truck #, Trailer #, Vehicle ID
+
+Equipment Identifier List: All available vehicle IDs eligible to track
+
+Request Structure
+Title	Description
+HTTP Method	GET
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+EXAMPLE REQUEST:
+https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/ABCD
+
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+
+
+Example Request
+Good Truck API Example
+curl --location -g --request GET 'https://macropoint-lite.com/api/1.0/carrier/requestpartnerstatus/{PartnerCode}' \
+--header 'Content-Type: application/xml' \
+--data-raw ''
+Example Response
+200 OK
+BodyHeader
+(6)
+View More
+<?xml version="1.0" encoding="utf-8"?>
+<PartnerResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Status>Success</Status>
+<PartnerStatus>
+            <Partnered>Yes</Partnered>
+            <AccountName>MPoint Trucking</AccountName>
+            <AccountNameMPID>1234567</AccountNameMPID>
+            <DOT>111222</DOT>
+            <OperatingAuthorityNumbers/>
+            <PartnerCodes>
+                <PartnerCode>
+POSTOcean Create Order
+https://macropoint-lite.com/api/1.0/orders/createorder
+Create Order API request for Ocean Tracking
+Request Structure
+Title	Description
+HTTP Method	POST
+Authentication	Basic Auth
+Content Type	APPLICATION/XML
+Response Format	XML
+Header	Encoded
+Create Order Elements
+Element	Description	Required
+TrackVia	For Ocean shipments, the Container Number must be supplied.	Yes
+TrackStartDateTime	Specified date and time Descartes MacroPoint starts tracking	Yes
+Reference Information	Captures key references for Ocean Shipments	No
+Notifications	Identifies the track duration, ping frequency, where notifications are sent within Descartes MacroPoint, and custom User Defined Fields on the order	Yes
+EmailCopiesOfUpdatesTo	Ability to assign an email address to a specified order for email notifications to be delivered	No
+Notes	Notes at the Order level	No
+TrackVia Tags
+Tag Name	Description	Example	Required
+ContainerNumber	Ocean Container Number	TCLU4664990	Yes
+TrackStarteDateTime Tags
+Tag Name	Description	Example	Required
+TrackStartDateTime	The date/time to start the tracking session. Hours are captured in 24 hour time. Format: YYYY-MM-DD{Space}HH:MM{Space}Time Zone	2020-01-01 12:00 ET
+Acceptable Time Zone Values	Yes
+Reference Information Tags
+Note: Either the Ocean Bill of Lading Number or the Carrier Booking Number and Carrier SCAC are required to track Ocean Shipments
+
+Tag Name	Description	Example	Required - See Note
+BillOfLadingNumber	Ocean Bill of Lading Number	ONEYSH1ABP795700	Yes
+CarrierBookingNumber	Ocean Carrier Booking Number	987654	Yes
+SCAC	Ocean Carrier SCAC	ABCD	Yes
+Notifications Tags
+View More
+Tag Name	Description	Example	Required
+PartnerMPID	The Descartes MacroPoint generated ID that denotes the account(s) that will receive notifications from the tracking session	1234567	Yes
+IDNumber	Unique shipment level identifier. Customer reference number shared between customer and carrier	Load-123	Yes
+TrackDurationInHours	Duration of the tracking session in hours. Maximum value denoted in contract	24	Yes
+TrackIntervalInMinutes	Ping frequency of the shipment in minutes. Value specified in contract	30	Yes
+CustomerUDFData	Unique data fields (Keys) to display and search in Descartes MacroPoint’s Control Tower. Fields (Keys) must be defined and enabled within Descartes MacroPoint prior to being sent on the Create Order request. Up to 10 unique fields (Keys) accepted, unlimited values	Key=UDF Field 1
+Value=123	No
+PostOverrideMPID	Second MPID utilized to return tracking data. Typically used to returned data to seaprated endpoints for specific shipments	9876543	No
+EmailCopiesOfUpdatesTo Tag
+Tag Name	Description	Example	Required
+EmailCopiesOfUpdatesTo	Provides the ability to assign multiple email address to a specific order for email notifications to be delivered. Multiple email addresses to be separated by comma	test@test.com
+test@test.com,test2@test.com	No
+Notes Tag
+Tag Name	Description	Example	Required
+Notes	Custom notes that are displayed in the Control Tower and notification emails at the order level	Test Order Notes	No
+Create Order Responses
+Response type	Response Code	Description
+Success	201	Order created successfully in Descartes MacroPoint
+Failure	400	Bad Request
+Failure	401	Unauthorized
+Failure	1000	All argument/domain-rule validation exceptions
+Failure	1001	Insufficient Funds
+Failure	1003	Phone on do not contact list
+Failure	1009	Custom text indicating that validation URL was unavailable
+Failure	3001	Customer UDF Key not valid
+Failure	9999	Unexpected error occurred - Administrator notified
+Response Example:
+Response 201
+
+
+Success
+FB93D3FE546749F5A3385D1E2961A12B
+AUTHORIZATION
+Basic Auth
+Username
+<username>
+Password
+<password>
+HEADERS
+Content-Type
+application/xml
+BODYraw
+View More
+<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="ContainerNumber">{ContainerNumber}</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+    <ReferenceInformation>
+        <Reference Type="BillofLadingNumber">{BOLNumber}</Reference>
+        <Reference Type="CarrierBookingNumber">{CarrierBookingNumber}</Reference>
+        <Reference Type="SCAC">{SCAC}</Reference>
+    <Notifications>
+        <Notification>
+
+
+Example Request
+Create Order - Ocean
+View More
+curl --location --request POST 'https://macropoint-lite.com/api/1.0/orders/createorder' \
+--header 'Content-Type: application/xml' \
+--data-raw '<Order xmlns="http://macropoint-lite.com/xml/1.0" >
+    <TrackVia>
+        <Number Type="ContainerNumber">TCLU4664990</Number>
+    </TrackVia>
+    <TrackStartDateTime>2020-01-01 12:00 ET</TrackStartDateTime>
+    <ReferenceInformation>
+        <Reference Type="BillofLadingNumber">ONEYSH1ABP795700</Reference>
+        <Reference Type="CarrierBookingNumber"></Reference>
+        <Reference Type="SCAC"></Reference>
+Example Response
+201 Created
+BodyHeader
+(6)
+<?xml version="1.0" encoding="utf-8"?>
+<OrderResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Status>Success</Status>
+    <OrderID>FB93D3FE546749F5A3385D1E2961A12B</OrderID>
+    <Errors/>
+</OrderResult>
+Descartes MacroPoint to Customer Endpoints
+The Descartes MacroPoint to customer endpoints allow a customer to obtain updates for a specific order including Location Updates, Order Status, Trip Events, and Schedule Alerts. All endpoints support basic authentication.
+
+GETLocation Updates
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&Latitude={3}&Longitude={4}&Uncertainty={5}&Street1={6}&Street2={7}&Neighborhood={8}&City={9}&State={10}&Postal={11}&Country={12}&LocationDateTimeUTC={13}&ApproxLocationDateTimeInLocalTime={14}&DataSource={15}&MPTrackingRequestID={16}
+The Location Updates Callback will push all location updates received on an order to a URL endpoint that is established by the customer.
+Individual Location Updates can be retrieved from the URL via a GET Request.
+Location updates are provided in real time as they are received on a live tracking session
+View More
+Parameter	Description
+MPOrderID	Unique MacroPoint generated ID for the order
+ID	Customers specific order ID
+Latitude	Latitude, in decimal degrees
+Longitude	Longitude, in decimal degrees
+Uncertainty	Approximate uncertainty radius, in miles
+Street1	Street address, if available
+Street2	Second street address line, if available
+Neighborhood	Neighborhood name, if available
+City	City name, if available
+State or Province	State name, if available
+Postal	Postal code, if available
+Country	Country, if available
+LocationDateTimeUTC	Date and time in ISO 8601 that location was obtained
+ApproxLocationDateTime InLocalTime	The date and time that this location was obtained, in the local time zone
+DataSource	Source the data was received from
+MPTrackingRequestID	Unique MacroPoint generated ID for the order if a Tracking Request was sent to a partnered MacroPoint carrier at the time of order creation. If no Tracking Request was sent to a MacroPoint partnered carrier this parameter will not contain any value
+The DataSource value in the URL return will differ based on the tracking session method. Below are the variation options:
+Shipment Type	DataSource Value
+Mobile App Tracked Shipment	Smart
+TMS Tracked Shipment	TMS
+Trailer GPS Tracked Shipment	Trailer
+ELD Tracked Shipment	ELD
+LTL Tracked Shipment	LTL
+Telematics Tracked Shipment	Telematics
+Triangulated Tracked Shipments (Canada Only)	Ping
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID=1234567&ID=Load-123&Latitude=39.842180&Longitude=-82.917530&Uncertainty=0&LocationDateTimeUTC=2020-01-01T12:00:00Z&Street1=6050+Oak+Tree+Blvd&Street2=Suite+190&Neighborhood=&City=Independence&State=OH&Postal=44131&Country=USA&ApproxLocationDateTimeInLocalTime=2020-01-01T12:00:00Z&DataSource=Ping&MPTrackingRequestID=A04EE941BEC446419749D8433885C654
+
+PARAMS
+MPOrderID
+{1}
+ID
+{2}
+Latitude
+{3}
+Longitude
+{4}
+Uncertainty
+{5}
+Street1
+{6}
+Street2
+{7}
+Neighborhood
+{8}
+City
+{9}
+State
+{10}
+Postal
+{11}
+Country
+{12}
+LocationDateTimeUTC
+{13}
+ApproxLocationDateTimeInLocalTime
+{14}
+DataSource
+{15}
+MPTrackingRequestID
+{16}
+
+
+Example Request
+Location Updates
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&Latitude={3}&Longitude={4}&Uncertainty={5}&Street1={6}&Street2={7}&Neighborhood={8}&City={9}&State={10}&Postal={11}&Country={12}&LocationDateTimeUTC={13}&ApproxLocationDateTimeInLocalTime={14}&DataSource={15}&MPTrackingRequestID={16}'
+GETOrder Status
+https://CustomerSpecifiedURL?MPOrderID={1}&MPTrackingRequestID={2}&ID={3}&Code={4}&Message={5}
+The Order Status Callback will push all order status changes on a specified order to a URL endpoint that is established by the Customer.
+Individual Order Status Updates can be retrieved from the URL via a GET Request.
+Order Status updates are provided in real time as they are received on a live tracking session.
+Parameter	Description
+MPOrderID	Unique Descartes MacroPoint generated ID for the order
+ID	Customers specific order ID
+Code	The Order Status Code
+Message	Order Status Message
+Order Status
+View More
+Order Status Code	Order Status Message	Order Status Description
+1001	Requesting+Installation	Requesting installation without app download
+1020	Ready+To+Track	Tracking session is awaiting the track start time
+1021	Tracking+Now	Tracking is actively taking place
+1050	Stopped+By+Creator	Tracking session was cancelled before completion by creator
+1051	Stopped+Early+By+Driver	Driver texted 'Stop' to Descartes MacroPoint during active tracking session
+1052	Denied+By+Driver	Driver texted 'Stop' to Descartes MacroPoint during active tracking session
+1070	Expired+Without+Installation	Tracking session expired without the installation of the Descartes MacroPoint app
+1071	Expired+Without+Location	Tracking session expired without a ping
+1022	Tracking+Completed+Successfully	Tracking is completed and the session yielded location data
+1053	Location+Hidden+By+Driver	Driver disabled or limited location services on the app
+1060	Tracking+-+Waiting+For+Update	A scheduled ping has not yet been acquired
+1061	Phone+Not+Locatable	Phone does not support Descartes MacroPoint mobile app
+1062	Reported+Wrong+Number	Invalid Number - Not Trackable
+1063	Reported+Landline	Invalid Number - Not Trackable
+1064	Refused+Installation	Driver declined to download Descartes MacroPoint app
+1002	Requesting+App+Install	Tracking is pending the driver download of the Descartes MacroPoint app for tracking to take place
+1065	Invalid+Truck+Number	Truck # is determined to be invalid
+1066	Invalid+Trailer+Number	Trailer # is determined to be invalid
+1067	Expired+With+Location+Hidden+By+Driver	Tracking session expired without a location due to location setting restrictions at the mobile device level
+1068	Driver+Phone+Unresponsive	Mobile device is not responding to Descartes MacroPoint request for a ping
+1069	Expired+With+Driver+Phone+Unresponsive	Tracking session expired without a location due to no response from the mobile device
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID=1234567&MPTrackingRequestID=89123456&ID=Load-123&Code=1020&Message=Ready+To+Track
+
+PARAMS
+MPOrderID
+{1}
+MPTrackingRequestID
+{2}
+ID
+{3}
+Code
+{4}
+Message
+{5}
+
+
+Example Request
+Order Status
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&MPTrackingRequestID={2}&ID={3}&Code={4}&Message={5}'
+GETTrip Events
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&Stop={3}&Event={4}&EventDateTime={5}&StopID={6}&ApproxLocationDateTimeInLocalTime={7}&Latitude={8}&Longitude={9}&Street1={10}&Street2={11}&Neighborhood={12}&City={13}&State={14}&Postal={15}&Country={16}&UpdatedBy={17}
+The Trip Events Callback will push all arrival and departure trip events on a specified order to a URL endpoint that is established by the customer.
+Individual Event Updates can be retrieved from the URL via a GET Request.
+Trip Events are provided in real time as they are received on a live tracking session.
+View More
+Parameter	Description
+MPOrderID	Unique Descartes MacroPoint ID
+MPTrackingRequestID	Unique Descartes MacroPoint generated ID for the order if a Tracking Request was sent to a partnered Descartes MacroPoint Carrier at the time of order creation. If no Tracking Request was sent to a MacroPoint Partnered Carrier this parameter will not contain any value
+ID	Customer specific order ID
+Stop	Name of the stop
+StopID	Customer internal reference ID for stop
+Event	Event is the “code” that goes with the event. E.g., X1 for Arrived at delivery location, X3 for arrived at pick-up location
+EventDateTime	Time in ISO8601 and in UTC
+ApproxLocationDateTimeIn LocalTime	The date and time that this event occurred in the local time zone
+Latitude	The latitude in decimal degrees
+Longitude	The longitude in decimal degrees
+Street1	The street address if available
+Street2	The second street address line if available
+Neighborhood	The name of the neighborhood if available
+City	The city name if available
+State	The state name if available
+Postal	The postal code if available
+Country	The country if available
+UpdatedBy	Method event was captured. Values include: Customer (via API or Control Tower), Carrier (via integration), Driver (via mobile app), MacroPoint (via geofence)
+Standard Event Codes:
+Event Name	Event Code
+Arrived - Pickup	X3
+Departed - Pickup	AF
+Arrived - DropOff	X1
+Departed - DropOff	D1
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&Stop={3}&EventDateTime={4}&StopID={5}&StopID={6}&ApproxLocationDateTimeInLocalTime={7}&Latitude={8}&Longitude={9}&Street1={10}&Street25={11}&Neighborhood={12}&City={13}&State={14}&Postal={15}&Country={16}&UpdatedBy={17}
+
+PARAMS
+MPOrderID
+{1}
+ID
+{2}
+Stop
+{3}
+Event
+{4}
+EventDateTime
+{5}
+StopID
+{6}
+ApproxLocationDateTimeInLocalTime
+{7}
+Latitude
+{8}
+Longitude
+{9}
+Street1
+{10}
+Street2
+{11}
+Neighborhood
+{12}
+City
+{13}
+State
+{14}
+Postal
+{15}
+Country
+{16}
+UpdatedBy
+{17}
+
+
+Example Request
+Trip Events
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&Stop={3}&Event={4}&EventDateTime={5}&StopID={6}&ApproxLocationDateTimeInLocalTime={7}&Latitude={8}&Longitude={9}&Street1={10}&Street2={11}&Neighborhood={12}&City={13}&State={14}&Postal={15}&Country={16}&UpdatedBy={17}'
+GETSchedule Alerts
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&StopType={3}&StopID={4}&StopName={5}&AddressLine1={6}&City={7}&State={8}&PostalCode={9}&ScheduleAlertCode={10}&ScheduledStartTimeInLocalTimeForStop={11}&ScheduledEndTImeInLocalTimeForStop={12}&ScheduleAlertText={13}&DistanceToStopInMiles={14}&EtaToStop={15}&ETALocalTimeZoneOffset={16}&MPTrackingRequestID={17}
+The Schedule Alerts Callback will push all ETAs and schedule alerts on a specified order to a URL endpoint that is established by the customer.
+Individual Schedule Alert Updates can be retrieved from the URL via a GET Request.
+Descartes MacroPoint will recalculate and return a new schedule alert with each corresponding location update received on the order
+
+Schedule Alerts can be throttled by Customer within Descartes MacroPoint if desired
+
+View More
+Parameter	Description
+MPOrderID	Unique Descartes MacroPoint generated ID for the order
+ID	Customers specific order ID
+StopType	The type of stop that is expected to occur next: Pickup or Dropoff
+StopID	Customer internal reference ID for stop
+StopName	The name of the stop
+AddressLine1	Street address, if available
+City	City name, if available
+State	State name, if available
+PostalCode	Postal code, if available
+Country	Country, if available
+ScheduleAlertCode	A numeric code that represents the current status of the order
+ScheduledStartTimeInLocalTimeForStop	The data and time stop was scheduled to begin in the local time zone (Format: yyyyMMddHHmmss)
+ScheduledEndTimeLocalInTimeForStop	The data and time stop was scheduled to end in the local time zone (Format: yyyyMMddHHmmss)
+ScheduleAlertText	A brief description of current schedule status for the order (i.e.: 2 Hours Behind)
+DistanceToStopInMiles	Distance to stop in miles from last known location
+EtaToStop	Estimated time to the stop based on the last known location in UTC
+ETALocalTimeZoneOffset	Local Timezone offset from UTC
+MPTrackingRequestID	Unique Descartes MacroPoint generated ID for the order
+Scheduled Alert Codes:
+Schedule Alert Name	Schedule Alert Code
+Cannot Determine	0
+On Time or Ahead of Schedule	1
+Behind Schedule	2
+Cannot Make It	3
+Past Appointment Time	4
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID=1234567&ID=Load-123&StopType=Pickup&StopID=123&StopName=Stop1&AddressLine1=6050+Oak+Tree+Blvd&City=Independence&State=OH&PostalCode=44131&ScheduleAlertCode=1&ScheduledStartTimeInLocalTimeForStop=20200101120000&ScheduledEndTImeInLocalTimeForStop=20200101120000&ScheduleAlertText=OnTime&DistanceToStopInMiles=20&EtaToStop=2020-01-01T11:55
+:00Z&ETALocalTimeZoneOffset=04:00&PTrackingRequestID=3531B52998C34E85ADF91BF976E9F0F1
+
+PARAMS
+MPOrderID
+{1}
+ID
+{2}
+StopType
+{3}
+StopID
+{4}
+StopName
+{5}
+AddressLine1
+{6}
+City
+{7}
+State
+{8}
+PostalCode
+{9}
+ScheduleAlertCode
+{10}
+ScheduledStartTimeInLocalTimeForStop
+{11}
+ScheduledEndTImeInLocalTimeForStop
+{12}
+ScheduleAlertText
+{13}
+DistanceToStopInMiles
+{14}
+EtaToStop
+{15}
+ETALocalTimeZoneOffset
+{16}
+MPTrackingRequestID
+{17}
+
+
+Example Request
+Schedule Alerts
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&StopType={3}&StopID={4}&StopName={5}&AddressLine1={6}&City={7}&State={8}&PostalCode={9}&ScheduleAlertCode={10}&ScheduledStartTimeInLocalTimeForStop={11}&ScheduledEndTImeInLocalTimeForStop={12}&ScheduleAlertText={13}&DistanceToStopInMiles={14}&EtaToStop={15}&ETALocalTimeZoneOffset={16}&MPTrackingRequestID={17}'
+GETEnhanced Shipment Status
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&StatusCode={3}&StatusMessage={4}&StatusDate={5}&StatusLocation={6}&EventETADateTimeInLocalTime={7}&EventETADateTimeUTC={8}
+The Enhanced Shipment Status Callback will push all LTL and Ocean status messages received on a specified order to a URL endpoint that is established by the customer.
+Individual Shipment Status Updates can be retrieved from the URL via a GET Request.
+LTL and Ocean status updates are provided in real time as they are received on a live tracking session
+
+Parameter	Description
+MPOrderID	Unique Descartes MacroPoint generated ID for the order
+ID	Customers specific order ID
+StatusCode	The Order Status Code
+StatusMessage	Text explaining the status code
+StatusDate	Date and Time in UTC that the status update occurred
+StatusLocationCity	City where the status change occurred if available
+StatusLocationState	State where the status change occurred if available
+StatusLocationCountry	Country where the status change occurred if available
+EventETADateTimeInLocalTime	Event ETA for the final stop in Local Time
+EventETADateTimeUTC	Event ETA for the final stop in UTC Time
+The following fields are passed directly from the Carrier and can vary by Carrier:
+StatusCode
+StatusMessage
+StatusDate
+StatusLocationCity
+StatusLocationState
+StatusLocationCountry
+EventETADateTimeInLocalTime
+EventETADateTimeUTC
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID=93213131093F4D01A0465997A8AFBEB4&ID=Test.LTL.Provider.3&StatusCode=At+Phoenix+on+03/27/21&StatusMessage=At+Phoenix+on+03/27/21&StatusDate=2021-03-27T11:51:02Z&StatusLocationCity=Phoenix&StatusLocationState=AZ&StatusLocationCountry=US&EventETADateTimeInLocalTime=12/5/2021+7:00:00+PM++01:00&EventETADateTimeUTC=2021-12-05T18:00:00Z
+
+PARAMS
+MPOrderID
+{1}
+ID
+{2}
+StatusCode
+{3}
+StatusMessage
+{4}
+StatusDate
+{5}
+StatusLocation
+{6}
+EventETADateTimeInLocalTime
+{7}
+EventETADateTimeUTC
+{8}
+
+
+Example Request
+Enhanced Shipment Status
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&StatusCode={3}&StatusMessage={4}&StatusDate={5}&StatusLocation={6}&EventETADateTimeInLocalTime={7}&EventETADateTimeUTC={8}'
+GETCold Chain Temperature Alerts
+https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&ReadingDateTimeUtc={3}&TempType={4}&Reading-Zone={5}&MPTrackingRequestID={6}
+The Cold Chain Temperature Alert Callback will push all temperature data on a specified order to a URL endpoint that is established by the customer.
+Individual Cold Chain Temperature Alert Updates can be retrieved from the URL via a GET Request.
+Temperature data are either pulled directly from telematics units or received directly from carriers via API.
+
+Parameter	Description
+MPOrderID	Unique Descartes MacroPoint generated ID for the order
+ID	Customer specific order ID
+ReadingDateTimeUtc	Date and time associated with temperature update
+TempType	Either fahrenheit or celsius based on temptype on Create Order call
+Reading-Zone	Tempurate and appropriate zone number. Parameter will reflect Zone number listed on Create Order call
+MPTrackingRequestID	Unique Descartes MacroPoint generated ID from the order
+SAMPLE URL:
+https://CustomerSpecifiedURL?MPOrderID=8F17AC56C1BB478995AC5F1BA28E8DB8&ID=727-1134&ReadingDateTimeUtc=2021-07-27T15:30:42.0000000Z&temptype=Celsius&reading-Zone1=5&MPTrackingRequestID=64A35D17558F443CAB400EAF3596D228
+
+PARAMS
+MPOrderID
+{1}
+ID
+{2}
+ReadingDateTimeUtc
+{3}
+TempType
+{4}
+Reading-Zone
+{5}
+MPTrackingRequestID
+{6}
+
+
+Example Request
+Cold Chain Temperature Alerts
+curl --location -g --request GET 'https://CustomerSpecifiedURL?MPOrderID={1}&ID={2}&ReadingDateTimeUtc={3}&TempType={4}&Reading-Zone={5}&MPTrackingRequestID={6}'
+Flat File Integration
+Descartes MacroPoint offers Customers the ability to Create Orders, Change Orders, and Stop Orders via the Descartes MacroPoint secure FTP.
+
+Customer to Descartes MacroPoint FTP Uploads
+File Upload & Authentication
+All files should be uploaded to the FTPS or SFTP URL: ftp.macropoint-lite.com/{MPID}
+
+Descartes MacroPoint will provide you:
+
+MPID
+FTPS/SFTP User ID
+FTPS/SFTP Password
+Each type of file listed below must be uploaded to the Inbound directory:
+
+Create Orders, Change Orders, and Stop Orders: /Inbound
+Downloadable Template
+
+POSTOrder Creation
+ftp.macropoint-lite.com/MPID
+Order Creation files allow customers to create, update, and stop tracking sessions within MacroPoint.
+Upload Directory: /Inbound
+
+Total number of columns: 18 (A-R)
+
+To successfully create a tracking session the following criteria must be met:
+
+File Format
+View More
+Column	Descartes MacroPoint Column Header Name	Description	Example	Required
+A	Location Update Frequency	An integer value in minutes to determine how often location updates are sent	240	Yes
+B	MPID	MacroPoint MPID number	1234567	Yes
+C	Load ID	Unique identifier for a shipment	Load123	Yes
+D	SCAC Code	Unique carrier code used to identify the carrier in your system. Displayed as the Carrier Mapping Code is Descartes MacroPoint UI	SCAC	Yes
+E	TrackVia	Captures details of the Driver, Truck, or Trailer for tracking purposes. Mobile, VehicleID, and/or TrailerID are supported. If the TrackVia is not completed, a Tracking Request will be sent to the Carrier to provide the needed details to track the order. Multiple values in a singe cell are supported pipe delimited.
+
+For International Phone Numbers outside the United States, the Country Code must be supplied in front of the phone number.
+Acceptable Country Codes	Mobile:2167894270
+VehicleID:V-545
+TrailerID:T-1234-34	No
+F	Stop ID	If StopSequencingRequired is 'True', provide the stop sequence number. Sequential integer Stop ID: 1 for first stop in load, 2 for second stop in load, so on and so forth	1	No
+G	Stop Type	Type of stop; acceptable notations: 'Pickup' or 'DropOff'	Pickup	Yes
+H	Stop Name	Unique value to assign a stop, typically a customer ID/Number	123	Yes
+I	Street Address Line 1	Individual stop address line 1 details	123 Test Lane	Yes
+J	Street Address Line 2	Individual stop address line 2 details	Suite 1	No
+K	City	City name of address	Independence	Yes
+L	State or Province	State name of address. Acceptable formatting: state abbreviation	OH	Yes
+M	Postal Code	Postal code of address. 5 and 9 digit postal codes accepted	44131	Yes
+N	Country	Country of address. Acceptable formatting: country abbreviations (US, USA)	USA	Yes
+O	Appointment Begin Date/Time	Earliest date/time driver should arrive at this stop, formatted as MM/DD/YYY HH:MI:SS
+24 hour values for hours	07/21/2021 13:00:00	Yes
+P	Appointment End Date/Time	Latest date/time driver should arrive at this stop, formatted as MM/DD/YYYY HH:MI:SS
+24 hour values for hours	07/22/2021 17:00:00	Yes
+Q	Appointment Time Zone	Values for local time zone for appointment. Accepted Values: ET, Eastern CT, Central MT, Mountain PT, Pacific Alaska, Alaska Hawaii, Hawaii	ET	Yes
+R	Status	Allows customer to report if a stop event has already occurred. Acceptable notations for Pickup: Not Arrived, Arrived, Loaded, Cancel
+Acceptable notations for DropOff: Not Arrived, Arrived, Unloaded, Cancel	Not Arrived	No
+
+
+Example Request
+Order Creation
+curl --location --request POST 'ftp.macropoint-lite.com/MPID'
+POSTChange Order
+ftp.macropoint-lite.com/MPID
+Change Order files allow customers to make alterations to order details such as a carrier ID, address information, and appointment times. These data points can be updated by resubmitting a file with a matching Load ID.
+Upload Directory: /Inbound
+Total number of columns: 18 (A-R)
+
+To successfully update a tracking session the following criteria must be met:
+
+Change Order Elements That Can Be Updated
+View More
+Column	Descartes MacroPoint Column Header Name	Description	Example	Required
+D	Carrier ID	Unique carrier code used to identify the carrier in your system	SCAC	Yes
+H	Stop Name	Unique value to assign a stop, typically a customer ID/Number	123	Yes
+I	Street Address Line 1	Individual stop address line 1 details	123 Test Lane	Yes
+J	Street Address Line 2	Individual stop address line 2 details	Suite 1	No
+K	City	City name of address	Independence	Yes
+L	State or Province	State name of address. Acceptable formatting: state abbreviation	OH	Yes
+M	Postal Code	Postal code of address. 5 and 9 digit postal codes accepted	44131	Yes
+N	Country	Country of address. Acceptable formatting: country abbreviations (US, USA)	USA	Yes
+O	Appointment Begin Date/Time	Earliest date/time driver should arrive at this stop, formatted as MM/DD/YYY HH:MI:SS
+24 hour values for hours	07/21/2021 13:00:00	Yes
+P	Appointment End Date/Time	Latest date/time driver should arrive at this stop, formatted as MM/DD/YYYY HH:MI:SS
+24 hour values for hours	07/22/2021 17:00:00	Yes
+Q	Appointment Time Zone	Values for local time zone for appointment. Accepted Values: ET, Eastern CT, Central MT, Mountain PT, Pacific Alaska, Alaska Hawaii, Hawaii	ET	Yes
+R	Status	Allows customer to report if a stop event has already occurred. Acceptable notations for Pickup: Not Arrived, Arrived, Loaded, Cancel
+Acceptable notations for DropOff: Not Arrived, Arrived, Unloaded, Cancel	Not Arrived	No
+Unacceptable Changes Overview
+View More
+Column	Descartes MacroPoint Column Header Name	Description	Example	Required
+A	Location Update Frequency	An integer value in minutes to determine how often location updates are sent	240	Yes
+B	MPID	MacroPoint MPID number	1234567	Yes
+C	Load ID	Unique identifier for a shipment	Load123	Yes
+E	TrackVia	Captures details of the Driver, Truck, or Trailer for tracking purposes. Mobile, VehicleID, and/or TrailerID are supported. If the TrackVia is not completed, a Tracking Request will be sent to the Carrier to provide the needed details to track the order. Multiple values in a singe cell are supported pipe delimited.	Mobile:2167894270
+VehicleID:V-545
+TrailerID:T-1234-34	No
+F	Stop ID	If StopSequencingRequired is 'True', provide the stop sequence number. Sequential integer Stop ID: 1 for first stop in load, 2 for second stop in load, so on and so forth	1	No
+G	Stop Type	Type of stop; acceptable notations: 'Pickup' or 'DropOff'	Pickup	Yes
+
+
+Example Request
+Change Order
+curl --location --request POST 'ftp.macropoint-lite.com/MPID'
+POSTStop Order
+ftp.macropoint-lite.com/MPID
+Stop Order files allow customers to cancel orders or tracking requests.
+Upload Directory: /Inbound
+Orders that have been created but are not yet tracking will be removed from Descartes MacroPoint's website if a Stop Order request is sent
+
+Orders that have been created and are tracking will be moved to 'Stopped By Creator' status
+
+Total number of columns: 18 (A-R)
+To successfully stop a tracking session the following criteria must be met:
+
+Stop Order Elements that will Cancel the Order or Tracking Request
+Column	Descartes MacroPoint Column Header Name	Description	Example	Required
+R	Status	Allows customer to report if a stop event has already occurred. Acceptable notation for Pickup to Stop the Order: Cancel
+Acceptable notation for DropOff to Stop the Order: Cancel	Cancel	No
+
+
+Example Request
+Stop Order
+curl --location --request POST 'ftp.macropoint-lite.com/MPID'
+Descartes MacroPoint to Customer
+Descartes MacroPoint allows a customer to obtain updates via text files for a specific order including Location Updates & Trip Events from a Descartes FTP server.
+
+All files can be picked up by connecting to the FTPS or SFTP URL: ftp.macropoint-lite.com/{MPID}
+
+Descartes MacroPoint will provide you:
+
+MPID
+FTPS/SFTP User ID
+FTPS/SFTP Password
+All files will be posted to the root folder, not a specified directory.
+
+Files will be named YYYYMMDD-HHMI-UID-Event as defined below:
+
+YYYY four digit year
+MM zero filled, two digit month
+DD zero filled, two digit day
+HH zero filled, hour, 24 hour format (so 1:00 pm is represented by 13)
+MI zero filled, minute
+UID zero filled, 32 character unique identifier
+Event one of the following: AR, LD, UL, DP, LC
+An example location update file name would be 20130711-2258-FABEA8BDE8B84DA8A37196A39056D5C1-LC.txt
+
+Event Code Descriptions
+
+Event	Description
+LC	Location Update
+AR	Arrived at Pickup
+LD	Departed from Pickup
+UL	Arrived at Dropoff
+DP	Departed from Dropoff
+POSTLocation Update
+ftp.macropoint-lite.com/MPID
+The Location Updates Callback will post all location updates received on an order to the Descartes SFTP/FTPS server
+Location updates are provided in real time as they are received on a live tracking session
+View More
+Parameter	Description
+Event Code	LC
+LoadID	Customers Specific Load ID
+Latitude	Latitude, in decimal degrees
+Longitude	Longitude, in decimal degrees
+Street 1	Street address, if available
+Street 2	Street address, if available
+City	City name
+State/Province	State/Province name
+Postal Code	Postal code
+Country	Country name
+Date & Time	Local date and time of the location update
+Time Zone	Local time zone of the update
+Example update:
+
+LC^123456^^41.396534^-81.65892^6050 Oak Tree Blvd S^^Indpendence^OH^44131^USA^2022-01-11 22:58:00^ET
+
+The '^' character represents a tab (ASCII 9)
+
+
+
+Example Request
+Location Update
+curl --location --request POST 'ftp.macropoint-lite.com/MPID'
+POSTTrip Event
+ftp.macropoint-lite.com/MPID
+The Trip Events Callback will post all arrival and departure trip events on a specified order to the Descartes MacroPoint SFTP/FTPS server
+Trip Events are provided in real time as they are received on a live tracking session.
+View More
+Parameter	Description
+Event Code	The event code (all possible codes listed below)
+LoadID	Customer specific Load ID
+StopID	Customer specific Stop ID from load
+Latitude	Latitude, in decimal degrees
+Longitude	Longitude, in decimal degrees
+Street Address 1	Street Address 1 of stop from load
+Street Address 2	Street Address 2 of stop from load
+City	City of stop from load
+State/Province	State/Province of stop from load
+Postal Code	Postal Code of stop from load
+Country	County of stop from load
+Local Time	Local time of event captured, format: YYYY-MM-DD HH:MMLSS
+Time Zone	Time zone of event capture
+Event Code Descriptions
+
+Event	Description
+AR	Arrived at Pickup
+LD	Departed from Pickup
+UL	Arrived at Dropoff
+DP	Departed from Dropoff
+Example Event Updates.
+
+AR^123456^1^^^1234 Main Street^^Cleveland^OH^44114^USA^2022-01-11 22:58:00^ET
+LD^123456^1^^^1234 Main Street^^Cleveland^OH^44114^USA^2022-01-11 22:58:00^ET
+UL^123456^1^^^5678 Broad Street^^Akron^OH^44260^USA^2022-01-11 22:58:00^ET
+DP^123456^1^^^5678 Broad Street^^Akron^OH^44260^USA^2022-01-11 22:58:00^ET
+
+The '^' character represents a tab (ASCII 9)
+
+
+
+Example Request
+Trip Event
+curl --location --request POST 'ftp.macropoint-lite.com/MPID'
+Descartes MacroPoint Best Practice Procedures
+Descartes MacroPoint recomends the following best practice procedures for obtaining the highest level of successfully created orders tracking:
+
+<TrackVia> Best Practies:
+
+Send all values (Mobile, VehicleID, and TrailerID) as often as possible
+Descartes MacroPoint pulls optimal tracking value based on carrier’s integration
+Descartes MacroPoint utilizes mobile failover when the VehicleID or TrailerID are invalid or do not pull valid data after two hours of attempting to track
+If you get back a HTTP 400 - Number Value is required for Number Type 'Mobile', display in your system the driver cell is required for this shipment
+If you get back a HTTP 201 with a TrackingRequestID only and no OrderID in the XML response then use below logic for display to user
+In the partner status call we pass back a field called “ConnectionMethod" per carrier if you can store that then use logic below
+If telematics, then display “Truck and Trailer # Needed”
+If TMS, then no additional info needed
+If no connection method, “Driver Cell Needed”
+If you get back a HTTP 201 with a OrderID only filled in then all set – no additional info needed
+If you get back a HTTP 201 with a OrderID and TrackingRequestID filled in then all set – no additional info needed
+Send a Change Order when any driver values are added/Changed (Truck, Mobile, Trailer) or anytime carrier is re-saved
+MacroPoint OrderID vs TrackingRequestID clarification:
+
+They can be used interchangeably for Change/Stop Order calls
+Only TrackingRequestID is returned when an order is sent with a mapped carrier code and not enough information to enable tracking. Order is still waiting on more details before it is able to track.
+Only OrderID is returned when an order is created with a cell phone number and non-mapped carrier ID
+TrackingRequestID and OrderID are returned when the an order is sent with a mapped carrier code and enough information to enable tracking
+Keep TMS/ERP and Descartes MacroPoint in sync as the driver information is populated in TMS/ERP
+
+Utilize Change Order in real time to immediately update the order in Descartes MacroPoint. Examples:
+
+Appointment time changes
+Address changes
+Driver information <TrackVia>
+Utilize <LastStopEventCompleted> when TMS/ERP is updated with arrival/departure captured
+
+Stop Order for new CarrierID and new Create Order request
+
+To override default geofence location send lat/long coordinates for each stop along with addresses
+
+Consume and display Descartes MacroPoint tracking status in internal system
+
+Implement Order Hyperlink API and embed Descartes MacroPoint URL in TMS/ERP to allow ops users to function out of a single system
+
+Implement Partner Status API and display carrier integration method in TMS carrier profile screen so operations users understand how a carrier is integrated with Descartes MacroPoint
+
+<StartTrackDateTime> - recommended 2-4 hours prior to the StartDateTime of the pickup
+
+<TrackDuration> - should be determined based on the transit time of the orders based on the appt times of the order. Recommendation is to add 24-48 hour buffer to loads to account for delays in transit
+
+If a load is moved by a team of drivers, update the <MaximumAllowableDrivingHoursPerDay> to 24 hours per day
+
+Trip Sheet Address should mirror address provided to carrier
+
+Utilizing User Defined Fields provides users increased value when interfacting with MacroPoint's Control Tower. They display on the load detail view giving users visibilty to important shipment information. They also give users the ability to search for loads relevant to them. Examples: Rep Name, PO #, BOL #, Customer Name
+
+IP Addresses
+40.84.236.201
+52.162.235.158
+157.55.140.174
+52.162.218.171
+52.162.221.162
+52.162.219.51
+13.66.21.7
+104.215.113.70
+40.124.43.106
+52.141.169.192/28
+52.152.27.96/28
+52.237.140.174
+Notes:
+
+FTP Callbacks are sent from IP Address: 52.141.169.192/28
+Above IP Addresses should be whitelisted if consuming Descartes MacroPoint Callbacks
+Time Zones
+Acceptable Time Zones
+View More
+WindowsTimeZoneID	Abbreviation
+Afghanistan Standard Time	UTC+04:30
+Alaskan Standard Time	Alaska
+Arabian Standard Time	UTC+04:00
+Arabic Standard Time	UTC+03:00
+Atlantic Standard Time	AT
+Aus Central W. Standard Time	UTC+08:45
+Azores Standard Time	UTC-01:00
+Cen. Australia Standard Time	UTC+09:30
+Central Asia Standard Time	UTC+06:00
+Central European Standard Time	UTC+01:00
+Central Pacific Standard Time	UTC+11:00
+Central Standard Time	CT
+Chatham Islands Standard Time	UTC+12:45
+China Standard Time	UTC+08:00
+Dateline Standard Time	UTC-12:00
+E. Australia Standard Time	UTC+10:00
+E. South America Standard Time	UTC-03:00
+Eastern Standard Time	ET
+GMT Standard Time	UTC+00:00
+Hawaiian Standard Time	Hawaii
+India Standard Time	UTC+05:30
+Iran Standard Time	UTC+03:30
+Line Islands Standard Time	UTC+14:00
+Lord Howe Standard Time	UTC+10:30
+Marquesas Standard Time	UTC-09:30
+Mid-Atlantic Standard Time	UTC-02:00
+Middle East Standard Time	UTC+02:00
+Mountain Standard Time	MT
+Myanmar Standard Time	UTC+06:30
+Nepal Standard Time	UTC+05:45
+Newfoundland and Labrador Standard Time	NT
+Newfoundland Standard Time	UTC-03:30
+North Asia Standard Time	UTC+07:00
+North Korea Standard Time	UTC+08:30
+Pacific Standard Time	PT
+Russia Time Zone 11	UTC+12:00
+Tokyo Standard Time	UTC+09:00
+Tonga Standard Time	UTC+13:00
+US Mountain Standard Time	Arizona
+UTC-11	UTC-11:00
+West Asia Standard Time	UTC+05:00
+Country Codes
+Acceptable Country Codes:
+
+Note: In compliance with GDPR regulations, customers must receive consent from drivers to submit European phone numbers for tracking
+
+View More
+Country	Code
+Albania	ALB
+Andorra	AND
+Australia	AUS
+Austria	AUT
+Belarus	BLR
+Belgium	BEL
+Bosnia and Herzegovina	BIH
+Bulgaria	BGR
+Canada	CAN
+Croatia	HRV
+Czech Republic (Czechia)	CZE
+Denmark	DNK
+Estonia	EST
+Finland	FIN
+France	FRA
+Germany	DEU
+Great Britain	GBR
+Greece	GRC
+Hungary	HUN
+Iceland	ISL
+Ireland	IRL
+Italy	ITA
+Latvia	LVA
+Liechtenstein	LIE
+Lithuania	LTU
+Luxembourg	LUX
+Malta	MLT
+Mexico	MEX
+Moldova	MDA
+Monaco	MCO
+Montenegro	MNE
+Netherlands	NLD
+North Macedonia	MKD
+Norway	NOR
+Poland	POL
+Portugal	PRT
+Romania	ROU
+Russia	RUS
+Serbia	SRB
+Slovakia	SVK
+Slovenia	SVN
+Spain	ESP
+Sweden	SWE
+Switzerland	CHE
+Ukraine	UKR
+United States	US
+×
+Example Response
+<?xml version="1.0" encoding="utf-8"?>
+<PartnerResult xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+    <Status>Success</Status>
+<PartnerStatus>
+            <Partnered>Yes</Partnered>
+            <AccountName>MPoint Trucking</AccountName>
+            <AccountNameMPID>1234567</AccountNameMPID>
+            <DOT>111222</DOT>
+            <OperatingAuthorityNumbers/>
+            <PartnerCodes>
+                <PartnerCode>
+                    <Code>ABCD</Code>
+                </PartnerCode>
+            </PartnerCodes>
+            <ConnectionMethods>
+                <ConnectionMethod>
+                    <Method>Telematics</Method>
+                    <Label>MPoint Trucking VehicleId</Label>
+                    <EquipmentIdentifierList>
+                        <EquipmentIdentifier>
+                            <Identifier>146</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>145</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>144</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>157</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>143</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>156</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>142</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>166</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>151</Identifier>
+                        </EquipmentIdentifier>
+                        <EquipmentIdentifier>
+                            <Identifier>141</Identifier>
+                        </EquipmentIdentifier>
+                    </EquipmentIdentifierList>
+                </ConnectionMethod>
+            </ConnectionMethods>
+        </PartnerStatus>
+    </PartnerStatuses>
+    <Errors/>
+</PartnerResult>
