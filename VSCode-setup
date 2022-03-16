@@ -1,0 +1,13 @@
+
+How to open devpod in  VSCode
+
+How to Debug
+
+How to reload the page:
+on Mac:  cmd+shift+p
+
+How do install dependencies
+
+
+cfgProvider, err := uConfig.NewYAML(uConfig.Static(map[string]map[string]string{
+		"macropoint": {"host": "http://127.0.0.1"}}))
