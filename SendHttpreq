@@ -1,0 +1,179 @@
+const (
+	cfgKey          = "macropoint"
+	createOrderPath = "/api/1.0/orders/createorder"
+	changeOrderPath = "/api/1.0/orders/changeorder/"
+	stopOrderPath   = "/api/1.0/orders/stoporder/"
+	goodTruckPath   = "/api/1.0/carrier/requestpartnerstatus/"
+)
+
+type (
+	// Gateway -
+	Gateway interface {
+		CreateOrder(ctx context.Context, params model.MacropointOrderRequest) (createOrderResp model.MacropointCreateOrderResponse, err error)
+		ChangeOrder(ctx context.Context, OrderID string, params model.MacropointOrderRequest) (changeOrderResp model.MacropointChangeOrderResponse, err error)
+		StopOrder(ctx context.Context, OrderID string) error
+		GoodTruck(ctx context.Context, CarrierID string) (GoodTruck model.MacropointGoodTruckResponse, err error)
+	}
+
+	// Params -
+	Params struct {
+		fx.In
+
+		CfgProvider config.Provider
+		Secrets     config2.Secrets
+		Clock       clock.Clock
+		HTTPClient  *http.Client
+		AuditLogger gateway2.AuditLogger
+	}
+	//HTTPError is detailed rest http error
+	HTTPError struct {
+		StatusCode int
+		Status     string
+		Msg        string
+	}
+	gateway struct {
+		cfg         entity.MacropointConfig
+		secrets     config2.Secrets
+		clock       clock.Clock
+		httpClient  *http.Client
+		auditLogger gateway2.AuditLogger
+	}
+)
+
+// New -
+func New(p Params) (Gateway, error) {
+	var cfg entity.MacropointConfig
+	if err := p.CfgProvider.Get(cfgKey).Populate(&cfg); err != nil {
+		return nil, err
+	}
+	return &gateway{
+		cfg:         cfg,
+		secrets:     p.Secrets,
+		clock:       p.Clock,
+		httpClient:  p.HTTPClient,
+		auditLogger: p.AuditLogger,
+	}, nil
+}
+
+// CreateOrder -
+func (g *gateway) CreateOrder(
+	ctx context.Context,
+	createOrderReq model.MacropointOrderRequest) (createOrderResp model.MacropointCreateOrderResponse, err error) {
+
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, createOrderPath, url.Values{})
+	var method string
+	method = http.MethodPost
+
+	if err := g.doMakeRequest(path, method, &createOrderReq, &createOrderResp); err != nil {
+		return model.MacropointCreateOrderResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for CreateOrderPayload request")
+	}
+
+	// TODO: Auditing matching attempts
+	return createOrderResp, nil
+}
+
+// ChangeOrder -
+func (g *gateway) ChangeOrder(
+	ctx context.Context,
+	OrderID string,
+	changeOrderReq model.MacropointOrderRequest) (changeOrderResp model.MacropointChangeOrderResponse, err error) {
+
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, changeOrderPath, url.Values{})
+	path = fmt.Sprintf("%s%s", path, OrderID)
+
+	var method string
+	method = http.MethodPost
+	if err := g.doMakeRequest(path, method, &changeOrderReq, &changeOrderResp); err != nil {
+		return model.MacropointChangeOrderResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for ChangeOrder request")
+	}
+	// TODO: Auditing matching attempts
+	return changeOrderResp, nil
+}
+
+// StopOrder -
+func (g *gateway) StopOrder(
+	ctx context.Context,
+	OrderID string) error {
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, stopOrderPath, url.Values{})
+	path = fmt.Sprintf("%s%s", path, OrderID)
+
+	var method string
+	method = http.MethodPost
+	req := model.MacropointStopOrderRequest{}
+	res := model.MacropointStopOrderResponse{}
+
+	if err := g.doMakeRequest(path, method, &req, &res); err != nil {
+		return errors.Wrap(errors.InternalError, err, "fail to get response for StopOrder request")
+	}
+	// TODO: Auditing matching attempts
+	return nil
+}
+
+// GoodTruck -
+func (g *gateway) GoodTruck(
+	ctx context.Context,
+	CarrierID string) (GoodTruckResp model.MacropointGoodTruckResponse, err error) {
+	var GoodTruck model.MacropointGoodTruckRequest
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, goodTruckPath, url.Values{})
+	if CarrierID != "" {
+		path = fmt.Sprintf("%s%s", path, CarrierID)
+	}
+	var method string
+	method = http.MethodGet
+	if err := g.doMakeRequest(path, method, &GoodTruck, &GoodTruckResp); err != nil {
+		return model.MacropointGoodTruckResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for GoodTruck request")
+	}
+	// TODO: Auditing matching attempts
+	return GoodTruckResp, nil
+}
+
+// CreateOrder -
+func (g *gateway) doMakeRequest(url string, method string, in interface{}, out interface{}) error {
+	var b bytes.Buffer
+	err := xml.NewEncoder(&b).Encode(in)
+	if err != nil {
+		return err
+	}
+
+	cli := g.httpClient
+	if cli == nil {
+		cli = http.DefaultClient
+	}
+
+	request, err := http.NewRequest(method, url, &b)
+	if err != nil {
+		return err
+	}
+	request.Header.Set(gateway2.ContentTypeHeader, gateway2.ContentTypeXML)
+	request.SetBasicAuth(g.secrets.MacropointUser, g.secrets.MacropointPass)
+
+	resp, err := cli.Do(request)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+
+		// read only the first MiB of the body in error case
+		limReader := io.LimitReader(resp.Body, 1024*1024)
+		body, _ := ioutil.ReadAll(limReader)
+		return &HTTPError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Msg:        string(body),
+		}
+
+	}
+
+	decoder := xml.NewDecoder(resp.Body)
+	decoder.CharsetReader = charset.NewReaderLabel
+	return decoder.Decode(out)
+}
+
+func (e HTTPError) Error() string {
+	return fmt.Sprintf("%q: %q", e.Status, e.Msg)
+}
