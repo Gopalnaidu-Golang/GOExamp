@@ -1,0 +1,24 @@
+1. Rest api calls
+2. microservices
+3. Run and debug application
+4. frameworks 
+5. test mocking
+6. marshaling and unmarshaling json
+7. Database connection
+8. Go routine
+9. Context pkg
+10. GRPC
+11. Errors
+12. Logs
+13. Mod file
+14. Bazel build
+15. Kafka producer and consumer.
+16. Data processing through event format.
+
+Link: Golang URL
+Learn go for beginners crash corse.
+
+Assignment
+1. Create a rest api service which will read a json file data and put into the database and verify the data format.
+2. Create a test.go file to validate the above scenario using mock framework.
+3. Read a yaml file which is having configuration value like hostname to Connect a server.
