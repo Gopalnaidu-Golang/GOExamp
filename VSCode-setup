@@ -8,6 +8,12 @@ on Mac:  cmd+shift+p
 
 How do install dependencies
 
+VScode shortcut:
+cntl+shift+p to reload work page
+command+press to go caller Func definition
+cntl+ - = to go back page
+Debud procedure
+Command + forwareslash = to comment block of code
 
 cfgProvider, err := uConfig.NewYAML(uConfig.Static(map[string]map[string]string{
 		"macropoint": {"host": "http://127.0.0.1"}}))
