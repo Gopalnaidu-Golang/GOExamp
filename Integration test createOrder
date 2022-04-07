@@ -1,0 +1,114 @@
+package testcase
+
+import (
+	"context"
+	"time"
+
+	"code.uber.internal/freight/uf-supply-locations/integration_tests/helper"
+	"code.uber.internal/freight/uf-supply-locations/integration_tests/macropoint/common"
+	"code.uber.internal/freight/uf-supply-locations/mapper"
+	"code.uber.internal/infra/ctf.git"
+	"github.com/stretchr/testify/require"
+)
+
+// E2ECreateOrderTestCase tests on all Macropoint events to validate
+// - integration with unifeed
+// - integration with MySQL
+// - integration with Macropoint API server
+func E2ECreateOrderTestCase(
+	provider ctf.DataProvider,
+	unifeed *helper.UnifeedProducer,
+	mysqlWrapper *helper.MySQLWrapper,
+) ctf.TestCase {
+	return ctf.NewTestCase(
+		"E2ECreateOrderTestCase",
+		func(ctx context.Context, t *ctf.T) {
+			config := map[string]string{}
+			if err := provider.Get(ctx, &config); err != nil {
+				require.Fail(t, "failed to retrieve config from DataProvider", err)
+			}
+
+			// Load test data
+			port := config["port"]
+			jobUUID := config["jobUUID"]
+			carrierUUID := config["carrierUUID"]
+			truckNumber := config["truckNumber"]
+			pickupStartTime, _ := mapper.MacropointLocationDateTimeUTCToDateTime(config["pickupStartTime"])
+			pickupEndTime, _ := mapper.MacropointLocationDateTimeUTCToDateTime(config["pickupEndTime"])
+			dropoffStartTime, _ := mapper.MacropointLocationDateTimeUTCToDateTime(config["dropoffStartTime"])
+			dropoffEndTime, _ := mapper.MacropointLocationDateTimeUTCToDateTime(config["dropoffEndTime"])
+			dropoffBusinessFacilityUUID := config["dropoffBusinessFacilityUUID"]
+			pickupBusinessFacilityUUID := config["pickupBusinessFacilityUUID"]
+
+			if err := common.DeleteMacropointOrder(jobUUID, mysqlWrapper); err != nil {
+				require.Fail(t, "fail to clean up test data before test", err, jobUUID)
+			}
+
+			// Start Macropoint server locally
+			macropointServer, err := common.New200CreateOrderServer(ctx, port)
+			if err != nil {
+				require.Fail(t, "fail to start macropoint server", err)
+			}
+			defer macropointServer.Stop()
+			go macropointServer.Start()
+			time.Sleep(100 * time.Millisecond) // wait for http server started
+
+			if err := unifeed.PublishCarrierChangeEvent(jobUUID, carrierUUID); err != nil {
+				require.Fail(t, "fail to PublishCarrierChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishTruckNumberChangeEvent(jobUUID, truckNumber); err != nil {
+				require.Fail(t, "fail to PublishTruckNumberChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishPickupStartTimeChangeEvent(jobUUID, pickupStartTime.String()); err != nil {
+				require.Fail(t, "fail to PublishPickupStartTimeChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishPickupEndTimeChangeEvent(jobUUID, pickupEndTime.String()); err != nil {
+				require.Fail(t, "fail to PublishPickupEndTimeChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishDropoffStartTimeChangeEvent(jobUUID, dropoffStartTime.String()); err != nil {
+				require.Fail(t, "fail to PublishDropoffStartTimeChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishDropoffEndTimeChangeEvent(jobUUID, dropoffEndTime.String()); err != nil {
+				require.Fail(t, "fail to PublishDropoffEndTimeChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishPickupLocationChangeEvent(jobUUID, pickupBusinessFacilityUUID); err != nil {
+				require.Fail(t, "fail to PublishPickupLocationChangeEvent unifeed event", err)
+			}
+
+			if err := unifeed.PublishDropoffLocationChangeEvent(jobUUID, dropoffBusinessFacilityUUID); err != nil {
+				require.Fail(t, "fail to PublishDropoffLocationChangeEvent unifeed event", err)
+			}
+
+			select {
+			case <-time.After(time.Duration(5) * time.Second): // timeout if no requests are received
+				require.Fail(t, "Server timeout. No order request received")
+			case _ = <-macropointServer.OnRequest():
+				t.Log("Received request for creating order")
+			}
+
+			// Verify that data are persisted in MySQL
+			time.Sleep(2 * time.Second) // wait for MySQL write
+			macropointParams, err := common.ReadMacropointOrder(jobUUID, mysqlWrapper)
+			if err != nil {
+				require.Fail(t, "fail to read order from MySQL", err)
+			}
+
+			require.Equal(t, carrierUUID, *macropointParams.CarrierUUID)
+			require.Equal(t, truckNumber, *macropointParams.TruckNumber)
+			require.Equal(t, pickupStartTime, *macropointParams.PickupStartTime)
+			require.Equal(t, pickupEndTime, *macropointParams.PickupEndTime)
+			require.Equal(t, pickupBusinessFacilityUUID, *macropointParams.PickupBusinessFacilityUUID)
+			require.Equal(t, dropoffStartTime, *macropointParams.DropoffStartTime)
+			require.Equal(t, dropoffEndTime, *macropointParams.DropoffEndTime)
+			require.Equal(t, dropoffBusinessFacilityUUID, *macropointParams.DropoffBusinessFacilityUUID)
+
+			t.Log("Verified that data are persisted in MySQL")
+		},
+	)
+}
