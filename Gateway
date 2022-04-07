@@ -1,0 +1,286 @@
+package macropoint
+
+import (
+	"bytes"
+	"context"
+	"encoding/csv"
+	"encoding/xml"
+	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
+	"net/url"
+	"time"
+
+	"github.com/pkg/sftp"
+	"golang.org/x/crypto/ssh"
+
+	config2 "code.uber.internal/freight/uf-supply-locations/config"
+	"code.uber.internal/freight/uf-supply-locations/entity"
+	"code.uber.internal/freight/uf-supply-locations/errors"
+	gateway2 "code.uber.internal/freight/uf-supply-locations/gateway"
+	"code.uber.internal/freight/uf-supply-locations/model"
+	"code.uber.internal/freight/uf-supply-locations/utils"
+
+	"golang.org/x/net/html/charset"
+
+	"github.com/benbjohnson/clock"
+	"go.uber.org/config"
+	"go.uber.org/fx"
+)
+
+const (
+	cfgKey          = "macropoint"
+	createOrderPath = "/api/1.0/orders/createorder"
+	changeOrderPath = "/api/1.0/orders/changeorder/"
+	stopOrderPath   = "/api/1.0/orders/stoporder/"
+	goodTruckPath   = "/api/1.0/carrier/requestpartnerstatus/"
+
+	// FTP specific values
+	remotePath          = "./8785867/Partner"
+	remoteFileName      = "partner_carrier.csv"
+	timeout             = 5 * time.Second
+	protocol            = "tcp"
+	batchWriteThreshold = 1000
+)
+
+var csvColHeader = []string{"DotNumber", "MappingCode", "CarrierName", "McNumber", "MxNumber"}
+
+type (
+	// Gateway -
+	Gateway interface {
+		CreateOrder(ctx context.Context, params model.MacropointOrderRequest) (createOrderResp model.MacropointOrderResponse, err error)
+		ChangeOrder(ctx context.Context, orderID string, params model.MacropointOrderRequest) (changeOrderResp model.MacropointOrderResponse, err error)
+		StopOrder(ctx context.Context, orderID string) error
+		GoodTruck(ctx context.Context, carrierID string) (goodTruck model.MacropointGoodTruckResponse, err error)
+		Sftp(ctx context.Context, overlaps []entity.MacroPointOverlap) error
+	}
+
+	// Params -
+	Params struct {
+		fx.In
+
+		CfgProvider config.Provider
+		Secrets     config2.Secrets
+		Clock       clock.Clock
+		HTTPClient  *http.Client
+		AuditLogger gateway2.AuditLogger
+	}
+	//HTTPError is detailed rest http error
+	HTTPError struct {
+		StatusCode int
+		Status     string
+		Msg        string
+	}
+	gateway struct {
+		cfg         entity.MacropointConfig
+		secrets     config2.Secrets
+		clock       clock.Clock
+		httpClient  *http.Client
+		auditLogger gateway2.AuditLogger
+	}
+)
+
+// New -
+func New(p Params) (Gateway, error) {
+	var cfg entity.MacropointConfig
+	if err := p.CfgProvider.Get(cfgKey).Populate(&cfg); err != nil {
+		return nil, err
+	}
+	return &gateway{
+		cfg:         cfg,
+		secrets:     p.Secrets,
+		clock:       p.Clock,
+		httpClient:  p.HTTPClient,
+		auditLogger: p.AuditLogger,
+	}, nil
+}
+
+// CreateOrder -
+func (g *gateway) CreateOrder(
+	ctx context.Context,
+	createOrderReq model.MacropointOrderRequest) (createOrderResp model.MacropointOrderResponse, err error) {
+
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, createOrderPath, url.Values{})
+
+	if err := g.doMakeRequest(path, http.MethodPost, &createOrderReq, &createOrderResp); err != nil {
+		return model.MacropointOrderResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for CreateOrder request")
+	}
+
+	return createOrderResp, nil
+}
+
+// ChangeOrder -
+func (g *gateway) ChangeOrder(
+	ctx context.Context,
+	OrderID string,
+	changeOrderReq model.MacropointOrderRequest) (changeOrderResp model.MacropointOrderResponse, err error) {
+
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, changeOrderPath, url.Values{})
+	path = fmt.Sprintf("%s%s", path, OrderID)
+
+	if err := g.doMakeRequest(path, http.MethodPost, &changeOrderReq, &changeOrderResp); err != nil {
+		return model.MacropointOrderResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for ChangeOrder request")
+	}
+	return changeOrderResp, nil
+}
+
+// StopOrder -
+func (g *gateway) StopOrder(
+	ctx context.Context,
+	OrderID string) error {
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, stopOrderPath, url.Values{})
+	path = fmt.Sprintf("%s%s", path, OrderID)
+
+	var method string
+	method = http.MethodPost
+	req := model.MacropointStopOrderRequest{}
+	res := model.MacropointStopOrderResponse{}
+
+	if err := g.doMakeRequest(path, method, &req, &res); err != nil {
+		return errors.Wrap(errors.InternalError, err, "fail to get response for StopOrder request")
+	}
+	return nil
+}
+
+// GoodTruck -
+func (g *gateway) GoodTruck(
+	ctx context.Context,
+	carrierID string) (goodTruckResp model.MacropointGoodTruckResponse, err error) {
+	var goodTruck model.MacropointGoodTruckRequest
+	path := gateway2.BuildURL(g.cfg.Host, utils.ZeroStr, goodTruckPath, url.Values{})
+	if carrierID != "" {
+		path = fmt.Sprintf("%s%s", path, carrierID)
+	}
+
+	if err := g.doMakeRequest(path, http.MethodGet, &goodTruck, &goodTruckResp); err != nil {
+		return model.MacropointGoodTruckResponse{},
+			errors.Wrap(errors.InternalError, err, "fail to get response for GoodTruck request")
+	}
+	return goodTruckResp, nil
+}
+
+func (g *gateway) doMakeRequest(url string, method string, in interface{}, out interface{}) error {
+	var b bytes.Buffer
+	err := xml.NewEncoder(&b).Encode(in)
+	if err != nil {
+		return err
+	}
+
+	cli := g.httpClient
+	if cli == nil {
+		cli = http.DefaultClient
+	}
+
+	request, err := http.NewRequest(method, url, &b)
+	if err != nil {
+		return err
+	}
+	request.Header.Set(gateway2.ContentTypeHeader, gateway2.ContentTypeXML)
+	request.SetBasicAuth(g.secrets.MacropointUser, g.secrets.MacropointPass)
+
+	resp, err := cli.Do(request)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+
+		// read only the first MiB of the body in error case
+		limReader := io.LimitReader(resp.Body, 1024*1024)
+		body, _ := ioutil.ReadAll(limReader)
+		return &HTTPError{
+			StatusCode: resp.StatusCode,
+			Status:     resp.Status,
+			Msg:        string(body),
+		}
+
+	}
+
+	decoder := xml.NewDecoder(resp.Body)
+	decoder.CharsetReader = charset.NewReaderLabel
+	return decoder.Decode(out)
+}
+
+func (e HTTPError) Error() string {
+	return fmt.Sprintf("%q: %q", e.Status, e.Msg)
+}
+
+// Sftp -
+func (g *gateway) Sftp(ctx context.Context, overlaps []entity.MacroPointOverlap) error {
+
+	sshConfig := ssh.ClientConfig{
+		User: g.secrets.MacropointFTPUser,
+		Auth: []ssh.AuthMethod{
+			ssh.Password(g.secrets.MacropointFTPPass),
+		},
+		Timeout:         timeout,
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+	}
+
+	serverAddr := fmt.Sprint(g.cfg.FTP + ":" + g.cfg.FTPPort)
+	conn, err := ssh.Dial(protocol, serverAddr, &sshConfig)
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+
+	sftpClient, err := sftp.NewClient(conn)
+	if err != nil {
+		return err
+	}
+	defer sftpClient.Close()
+
+	remoteFile, err := sftpClient.Create(remotePath + "/" + remoteFileName)
+	if err != nil {
+		return err
+	}
+	defer remoteFile.Close()
+
+	csvWriter := csv.NewWriter(remoteFile)
+	var buffer [][]string
+	buffer = append(buffer, csvColHeader)
+	bufferHasContent := false
+
+	for index := range overlaps {
+		buffer = append(buffer, []string{overlaps[index].DOTNumber, overlaps[index].MappingCode, overlaps[index].CarrierName,
+			overlaps[index].MCNumber, overlaps[index].MXNumber})
+
+		bufferHasContent = true
+
+		if index != 0 && index%batchWriteThreshold == 0 {
+			err = csvWriter.WriteAll(buffer)
+			if err != nil {
+				return err
+			}
+
+			csvWriter.Flush()
+			err = csvWriter.Error()
+			if err != nil {
+				return err
+			}
+
+			bufferHasContent = false
+			buffer = nil
+		}
+	}
+
+	// Write remaining content from buffer
+	if bufferHasContent {
+		err = csvWriter.WriteAll(buffer)
+		if err != nil {
+			return err
+		}
+	}
+
+	csvWriter.Flush()
+	err = csvWriter.Error()
+	if err != nil {
+		return err
+	}
+
+	return err
+}
