@@ -1,0 +1,81 @@
+service:
+  name: uf-supply-locations
+
+# Note that outbound key for uf-supply-locations is required for running ITEA locally.
+yarpc:
+  outbounds:
+    uf-supply-locations:
+      service: uf-supply-locations
+      tchannel:
+        peer: "127.0.0.1:6707"
+    uf-supply-locations-grpc:
+      service: uf-supply-locations
+      grpc:
+        peer: "127.0.0.1:6709"
+
+nemo:
+  default_cluster: local
+  default_database: doppler
+  clusters:
+    local:
+      databases:
+        doppler:
+          host: 127.0.0.1
+          ports:
+            master: 19723
+            slave: 19723
+          user: uber
+          password: uber
+          params:
+            charset: utf8
+            parseTime: True
+
+staticDataProvider:
+  E2ECreateOrderTestCase:
+    - port: 8085
+      jobUUID: 662e9bea-2395-4ff9-80ec-b63540f50adb
+      carrierUUID: 916a6f32-07d9-4a22-b8ee-35266fceb324
+      truckNumber: "this_is_truck_number"
+      dropoffStartTime: "2006-01-03T18:04:05Z"
+      dropoffEndTime: "2006-01-03T1:04:05Z"
+      dropoffBusinessFacilityUUID: c53a5a32-8f74-4db3-af81-02106d6040a8
+      pickupStartTime: "2006-01-02T18:04:05Z"
+      pickupEndTime: "2006-01-02T22:05:05Z"
+      pickupBusinessFacilityUUID: 0b26b6f3-8c3b-4863-9d9f-ad7fdb773be1
+  BadRequestOnCreateOrderTestCase:
+    - port: 8085
+      jobUUID: 662e9bea-2395-4ff9-80ec-b63540f50adb
+      carrierUUID: 916a6f32-07d9-4a22-b8ee-35266fceb324
+      truckNumber: "this_is_truck_number"
+      dropoffStartTime: "2006-01-03T18:04:05Z"
+      dropoffEndTime: "2006-01-03T1:04:05Z"
+      dropoffBusinessFacilityUUID: c53a5a32-8f74-4db3-af81-02106d6040a8
+      pickupStartTime: "2006-01-02T18:04:05Z"
+      pickupEndTime: "2006-01-02T22:05:05Z"
+      pickupBusinessFacilityUUID: 0b26b6f3-8c3b-4863-9d9f-ad7fdb773be1
+  E2EChangeOrderTestCase:
+    - port: 8085
+      jobUUID: 662e9bea-2395-4ff9-80ec-b63540f50adb
+      carrierUUID: 916a6f32-07d9-4a22-b8ee-35266fceb324
+      truckNumber: "this_is_truck_number"
+      dropoffStartTime: "2006-01-03T18:04:05Z"
+      dropoffEndTime: "2006-01-03T1:04:05Z"
+      dropoffBusinessFacilityUUID: c53a5a32-8f74-4db3-af81-02106d6040a8
+      pickupStartTime: "2006-01-02T18:04:05Z"
+      pickupEndTime: "2006-01-02T22:05:05Z"
+      pickupBusinessFacilityUUID: 0b26b6f3-8c3b-4863-9d9f-ad7fdb773be1
+      orderID: "12345"
+      trackingID: "45678"
+  E2EStopOrderTestCase:
+    - port: 8085
+      jobUUID: 662e9bea-2395-4ff9-80ec-b63540f50adb
+      carrierUUID: 916a6f32-07d9-4a22-b8ee-35266fceb324
+      truckNumber: "this_is_truck_number"
+      dropoffStartTime: "2006-01-03T18:04:05Z"
+      dropoffEndTime: "2006-01-03T1:04:05Z"
+      dropoffBusinessFacilityUUID: c53a5a32-8f74-4db3-af81-02106d6040a8
+      pickupStartTime: "2006-01-02T18:04:05Z"
+      pickupEndTime: "2006-01-02T22:05:05Z"
+      pickupBusinessFacilityUUID: 0b26b6f3-8c3b-4863-9d9f-ad7fdb773be1
+      orderID: "12345"
+      trackingID: "45678"
