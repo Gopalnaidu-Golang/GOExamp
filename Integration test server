@@ -1,0 +1,220 @@
+package common
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
+
+	"code.uber.internal/freight/uf-supply-locations/model"
+	"code.uber.internal/glue/basefactory"
+)
+
+type (
+	// MacropointServer -
+	MacropointServer struct {
+		srv  *http.Server
+		ch   chan *MacropointRequest
+		ctx  context.Context
+		data *MacropointServerData
+	}
+
+	// MacropointRequest -
+	MacropointRequest struct {
+	}
+
+	// MacropointServerData -
+	MacropointServerData struct {
+		LoadID int64
+	}
+)
+
+// New200CreateOrderServer -
+func New200CreateOrderServer(ctx context.Context, port string) (*MacropointServer, error) {
+	return newMacropointServer(ctx, port, okOnPOST)
+}
+
+// New400CreateOrderServer -
+func New400CreateOrderServer(ctx context.Context, port string) (*MacropointServer, error) {
+	return newMacropointServer(ctx, port, badRequestOnPOST)
+}
+
+// New200StopOrderServer -
+func New200StopOrderServer(ctx context.Context, port string) (*MacropointServer, error) {
+	return newMacropointServer(ctx, port, okOnStop)
+}
+
+// Start -
+func (s *MacropointServer) Start() {
+	if err := s.srv.ListenAndServe(); err != nil {
+		log.Printf("Ignored. %v\n", err)
+	}
+}
+
+// Stop -
+func (s *MacropointServer) Stop() {
+	close(s.ch)
+	if err := s.srv.Shutdown(s.ctx); err != nil {
+		// ignore the error
+		log.Println("Ignored failure on s.srv.Shutdown()")
+	}
+}
+
+// OnRequest -
+func (s *MacropointServer) OnRequest() <-chan *MacropointRequest {
+	s.ch <- &MacropointRequest{}
+	return s.ch
+}
+
+// Data -
+func (s *MacropointServer) Data() *MacropointServerData {
+	return s.data
+}
+
+// newMacropointServer -
+func newMacropointServer(ctx context.Context, port string,
+	fn func(http.ResponseWriter, *http.Request, *MacropointServerData, chan<- *MacropointRequest)) (*MacropointServer, error) {
+	ch := make(chan *MacropointRequest, 1)
+	data := MacropointServerData{
+		LoadID: basefactory.Int64(),
+	}
+	router := http.NewServeMux()
+	router.HandleFunc("/", func(writer http.ResponseWriter, httpRequest *http.Request) {
+		defer func() {
+			if err := httpRequest.Body.Close(); err != nil {
+				// ignore the error
+				log.Println("Ignored failure on httpRequest.Body.Close()")
+			}
+			if r := recover(); r != nil {
+				// ignore the panic
+				log.Printf("Ignored panic. %v\n", r)
+			}
+		}()
+		fn(writer, httpRequest, &data, ch)
+	})
+	svr := &http.Server{
+		Addr:    fmt.Sprintf(":%s", port),
+		Handler: router,
+	}
+	return &MacropointServer{
+		srv:  svr,
+		ch:   ch,
+		ctx:  ctx,
+		data: &data,
+	}, nil
+}
+
+func okOnPOST(writer http.ResponseWriter, httpRequest *http.Request, data *MacropointServerData, ch chan<- *MacropointRequest) {
+	if httpRequest.Method != http.MethodPost {
+		log.Panicf("Expect POST method but received:%v\n", httpRequest.Method)
+	}
+
+	bytes, err := ioutil.ReadAll(httpRequest.Body)
+	if err != nil {
+		log.Panicf("Failed to read HTTP request:%v\n", err)
+	}
+
+	createOrderRequest := model.MacropointOrderRequest{}
+	if err := json.Unmarshal(bytes, &createOrderRequest); err != nil {
+		log.Panicf("Failed to unmarshal model.MacropointCreateOrderRequest{}. %v", err)
+	}
+
+	req := MacropointRequest{}
+	ch <- &req
+
+	resp := model.MacropointOrderResponse{
+		OrderID: "", //&data.LoadID,
+	}
+
+	writer.WriteHeader(http.StatusOK)
+	writer.Header().Set("Content-Type", "application/json")
+	bytes, _ = json.Marshal(resp)
+	if _, err = writer.Write(bytes); err != nil {
+		// ignore the error
+		log.Println("Ignored failure on writer.Write()")
+	}
+}
+
+func okOnPATCH(writer http.ResponseWriter, httpRequest *http.Request, data *MacropointServerData, ch chan<- *MacropointRequest) {
+	if httpRequest.Method != http.MethodPatch {
+		log.Panicf("Expect PATCH method but received:%v\n", httpRequest.Method)
+	}
+
+	bytes, err := ioutil.ReadAll(httpRequest.Body)
+	if err != nil {
+		log.Panicf("Failed to read HTTP request:%v\n", err)
+	}
+
+	changeOrderRequest := model.MacropointOrderRequest{}
+	if err := json.Unmarshal(bytes, &changeOrderRequest); err != nil {
+		log.Panicf("Failed to unmarshal model.FourkitesTrackingRequest{}. %v", err)
+	}
+
+	req := MacropointRequest{}
+	ch <- &req
+
+	resp := model.MacropointOrderResponse{
+		Status: "200",
+	}
+
+	writer.WriteHeader(http.StatusOK)
+	writer.Header().Set("Content-Type", "application/json")
+	bytes, _ = json.Marshal(resp)
+	if _, err = writer.Write(bytes); err != nil {
+		// ignore the error
+		log.Println("Ignored failure on writer.Write()")
+	}
+}
+
+func badRequestOnPOST(writer http.ResponseWriter, httpRequest *http.Request, data *MacropointServerData, ch chan<- *MacropointRequest) {
+	if httpRequest.Method != http.MethodPost {
+		log.Panicf("Expect POST method but received:%v\n", httpRequest.Method)
+	}
+
+	bytes, err := ioutil.ReadAll(httpRequest.Body)
+	if err != nil {
+		log.Panicf("Failed to read HTTP request:%v\n", err)
+	}
+
+	createOrderRequest := model.MacropointOrderRequest{}
+	if err := json.Unmarshal(bytes, &createOrderRequest); err != nil {
+		log.Panicf("Failed to unmarshal model.MacropointCreateOrderRequest{}. %v", err)
+	}
+
+	req := MacropointRequest{}
+	ch <- &req
+
+	resp := map[string]interface{}{
+		"statusCode": 400,
+		"errors":     []string{"this_is_bad_request"},
+	}
+
+	writer.WriteHeader(http.StatusBadRequest)
+	writer.Header().Set("Content-Type", "application/json")
+	bytes, _ = json.Marshal(resp)
+	if _, err = writer.Write(bytes); err != nil {
+		// ignore the error
+		log.Println("Ignored failure on writer.Write()")
+	}
+}
+func okOnStop(writer http.ResponseWriter, httpRequest *http.Request, data *MacropointServerData, ch chan<- *MacropointRequest) {
+	if httpRequest.Method != http.MethodPost {
+		log.Panicf("Expect POST method but received:%v\n", httpRequest.Method)
+	}
+
+	req := MacropointRequest{}
+	ch <- &req
+	resp := model.MacropointOrderResponse{
+		Status: "200",
+	}
+
+	writer.WriteHeader(http.StatusOK)
+	writer.Header().Set("Content-Type", "application/json")
+	bytes, _ := json.Marshal(resp)
+	if _, err := writer.Write(bytes); err != nil {
+		// ignore the error
+		log.Println("Ignored failure on writer.Write()")
+	}
+}
