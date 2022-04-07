@@ -3,6 +3,10 @@ package macropoint
 import (
 	"context"
 
+	"go.uber.org/multierr"
+
+	"thriftrw/code.uber.internal/data/schemas/basic/datatypes"
+
 	"code.uber.internal/freight/uf-supply-locations/errors"
 	"code.uber.internal/freight/uf-supply-locations/mapper"
 	"code.uber.internal/freight/uf-supply-locations/model"
@@ -10,14 +14,13 @@ import (
 	unifeedmodel "code.uber.internal/freight/unifeed-client/model"
 	"code.uber.internal/glue/framework.git/logger"
 	"go.uber.org/zap"
-	"thriftrw/code.uber.internal/data/schemas/basic/datatypes"
 )
 
 // RegisterTracking -
 func (c controller) RegisterTracking(ctx context.Context, event *unifeedmodel.UnifeedEvent) error {
 
-	if event == nil || isEmptyValue(event) {
-		return errors.New(errors.ParamsError, "nil or empty event received from unifeed")
+	if event == nil {
+		return errors.New(errors.ParamsError, "nil event received from unifeed")
 	}
 
 	jobUUID := event.EntityUUID
@@ -25,62 +28,47 @@ func (c controller) RegisterTracking(ctx context.Context, event *unifeedmodel.Un
 		return errors.New(errors.ParamsError, "empty JobUUID in unifeed event")
 	}
 
-	log := logger.FromContext(ctx).With(
-		zap.String("job_uuid", jobUUID),
-		zap.Any("event_noindex", event))
-	log.Info("received macropoint events")
+	logger.FromContext(ctx).With(zap.String("job_uuid", jobUUID), zap.Any("event_noindex", event)).Info("received macropoint events")
 
 	// Read macropoint order from MySQL
 	order, err := c.macropointRepo.ReadbyjobUUID(ctx, jobUUID)
-
-	if err != nil && !errors.IsErrorType(err, errors.NotFoundError) {
-		return err
-	} else if errors.IsErrorType(err, errors.NotFoundError) { // Check if row for JobUUID exists, if not create new row
-		order.JobUUID = jobUUID
-		updatedOrder := c.updateExistingOrderWithUnifeedEvent(event, order)
-		return c.saveOrderParamsToDB(ctx, jobUUID, updatedOrder)
-	} else if utils.IsNilOrEmpty(order.OrderID) { // If order NOT created,
-		updatedOrder := c.updateExistingOrderWithUnifeedEvent(event, order)
-		err = c.saveOrderParamsToDB(ctx, jobUUID, updatedOrder)
-		if err != nil {
+	if err != nil {
+		if !errors.IsErrorType(err, errors.NotFoundError) {
 			return err
 		}
-
-		// Check eligibility and create order if eligible
-		if isMacroPointEligible(updatedOrder) {
-			return c.createOrder(ctx, updatedOrder)
-		}
-	} else { // If order existed -
-
-		if event.EventType == mapper.UnifeedEventTypeLoadCarrierUUID ||
-			event.EventType == mapper.UnifeedEventTypeLoadTruckNumber { // fields derived from event can't be updated-
-
-			if err = c.stopOrder(ctx, order); err != nil {
-				return err
-			}
-
-			updatedOrder := c.updateExistingOrderWithUnifeedEvent(event, order)
-			err = c.saveOrderParamsToDB(ctx, jobUUID, updatedOrder)
-			if err != nil {
-				return err
-			}
-
-			if isMacroPointEligible(updatedOrder) {
-				return c.createOrder(ctx, updatedOrder)
-			}
-		} else { // fields derived from event can be updated
-			updatedOrder := c.updateExistingOrderWithUnifeedEvent(event, order)
-			err = c.saveOrderParamsToDB(ctx, jobUUID, updatedOrder)
-			if err != nil {
-				return err
-			}
-
-			if isMacroPointEligible(updatedOrder) {
-				return c.changeOrder(ctx, updatedOrder)
-			}
-		}
+		order.JobUUID = jobUUID
 	}
-	return nil
+
+	logger.FromContext(ctx).With(zap.Any("job_uuid", jobUUID), zap.Any("read_order_noindex", order)).Info("after read order from table")
+
+	updatedOrder := c.updateExistingOrderWithUnifeedEvent(event, order)
+	err = c.saveOrderParamsToDB(ctx, jobUUID, updatedOrder)
+	if err != nil {
+		return err
+	}
+
+	if isEmptyValue(event) {
+		logger.FromContext(ctx).With(zap.String("job_uuid", jobUUID),
+			zap.String("event_type", event.EventType)).
+			Info("received empty event from unifeed, returning")
+		return nil
+	}
+
+	if utils.IsNilOrEmpty(order.OrderID) {
+		logger.FromContext(ctx).With(zap.Any("job_uuid", jobUUID)).Info("order doesn't exist, will try to create one")
+		return c.createOrder(ctx, updatedOrder)
+	}
+
+	if event.EventType == mapper.UnifeedEventTypeLoadCarrierUUID {
+		logger.FromContext(ctx).With(zap.Any("job_uuid", jobUUID), zap.Stringp("order_id", order.OrderID)).Info("will stop and try to create order")
+		if err = c.stopOrder(ctx, order); err != nil {
+			return err
+		}
+		return c.createOrder(ctx, updatedOrder)
+	}
+
+	logger.FromContext(ctx).With(zap.Any("job_uuid", jobUUID), zap.Stringp("order_id", order.OrderID)).Info("will try to change order")
+	return c.changeOrder(ctx, updatedOrder)
 }
 
 func (c controller) updateExistingOrderWithUnifeedEvent(
@@ -89,24 +77,41 @@ func (c controller) updateExistingOrderWithUnifeedEvent(
 ) model.MacropointOrder {
 	if event.EventType == mapper.UnifeedEventTypeLoadCarrierUUID {
 		currentOrder.CarrierUUID = &event.NewValue
+		currentOrder.TruckNumber = utils.ZeroStrPtr
 	} else if event.EventType == mapper.UnifeedEventTypeLoadTruckNumber {
 		currentOrder.TruckNumber = &event.NewValue
 	} else if event.EventType == mapper.UnifeedEventTypePickupBusinessFacility {
 		currentOrder.PickupBusinessFacilityUUID = &event.NewValue
 	} else if event.EventType == mapper.UnifeedEventTypeLoadScheduledSourceStartTime {
-		startTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
-		currentOrder.PickupStartTime = &startTime
+		if isEmptyValue(event) {
+			currentOrder.PickupStartTime = &model.MacropointBlankTime
+		} else {
+			startTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
+			currentOrder.PickupStartTime = &startTime
+		}
 	} else if event.EventType == mapper.UnifeedEventTypeLoadScheduledSourceEndTime {
-		endTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
-		currentOrder.PickupEndTime = &endTime
+		if isEmptyValue(event) {
+			currentOrder.PickupEndTime = &model.MacropointBlankTime
+		} else {
+			endTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
+			currentOrder.PickupEndTime = &endTime
+		}
 	} else if event.EventType == mapper.UnifeedEventTypeDropoffBusinessFacility {
 		currentOrder.DropoffBusinessFacilityUUID = &event.NewValue
 	} else if event.EventType == mapper.UnifeedEventTypeLoadScheduledDestinationStartTime {
-		dropOffStartTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
-		currentOrder.DropoffStartTime = &dropOffStartTime
+		if isEmptyValue(event) {
+			currentOrder.DropoffStartTime = &model.MacropointBlankTime
+		} else {
+			dropOffStartTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
+			currentOrder.DropoffStartTime = &dropOffStartTime
+		}
 	} else if event.EventType == mapper.UnifeedEventTypeLoadScheduledDestinationEndTime {
-		dropOffEndTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
-		currentOrder.DropoffEndTime = &dropOffEndTime
+		if isEmptyValue(event) {
+			currentOrder.DropoffEndTime = &model.MacropointBlankTime
+		} else {
+			dropOffEndTime, _ := mapper.UnifeedTimeStrToUTCTime(event.NewValue)
+			currentOrder.DropoffEndTime = &dropOffEndTime
+		}
 	}
 	return currentOrder
 }
@@ -123,8 +128,8 @@ func (c *controller) saveOrderParamsToDB(ctx context.Context, jobUUID string, or
 	return nil
 }
 
-func isMacroPointEligible(params model.MacropointOrder) bool {
-	return !utils.IsNilOrEmpty(params.CarrierUUID) && !utils.IsNilOrEmpty(params.LoadUUID) &&
+func (c *controller) isMacroPointEligible(ctx context.Context, params model.MacropointOrder) (bool, error) {
+	hasAllData := !utils.IsNilOrEmpty(params.CarrierUUID) &&
 		!utils.IsNilOrEmpty(params.TruckNumber) &&
 		!utils.IsNilOrEmpty(params.PickupBusinessFacilityUUID) &&
 		!utils.IsNilOrEmpty(params.DropoffBusinessFacilityUUID) &&
@@ -136,10 +141,68 @@ func isMacroPointEligible(params model.MacropointOrder) bool {
 		utils.TimeFromPointer(params.DropoffStartTime) != model.MacropointZeroTime &&
 		params.DropoffEndTime != nil &&
 		utils.TimeFromPointer(params.DropoffEndTime) != model.MacropointZeroTime
+
+	if !hasAllData {
+		logger.FromContext(ctx).With(zap.Any("params_noindex", params)).Info("missing fields to make request to macropoint")
+		return false, nil
+	}
+
+	isCarrierParterned, err := c.isCarrierPartnered(ctx, params)
+	if err != nil {
+		logger.FromContext(ctx).With(zap.Error(err)).Error("Failed to determine ff carrier is parterned")
+		return false, err
+	}
+
+	logger.FromContext(ctx).With(zap.Any("params_noindex", params),
+		zap.Bool("hasAllData", hasAllData),
+		zap.Bool("isCarrierPartnered", isCarrierParterned)).Info("macropoint order eligibility")
+	return hasAllData && isCarrierParterned, nil
 }
 
 func isEmptyValue(event *unifeedmodel.UnifeedEvent) bool {
 	return len(event.NewValue) == 0
+}
+
+func (c *controller) isCarrierPartnered(ctx context.Context, params model.MacropointOrder) (bool, error) {
+
+	dotNumber, err := c.getDotNumber(ctx, utils.StringFromPointer(params.CarrierUUID))
+	if err != nil || len(dotNumber) == 0 {
+		logger.FromContext(ctx).With(zap.Error(err),
+			zap.Stringp("carrier_uuid", params.CarrierUUID)).
+			Error("Failed to get DotNumber")
+		return false, err
+	}
+
+	res, err := c.macropointGateway.GoodTruck(ctx, dotNumber)
+	if err != nil {
+		logger.FromContext(ctx).With(zap.Error(err),
+			zap.Stringp("carrier_uuid", params.CarrierUUID),
+			zap.String("dot_number", dotNumber)).
+			Error("Failed to get GoodTruck response")
+		return false, err
+	}
+
+	if utils.StringToBool(res.PartnerStatus.Partnered) {
+		var multiErr error
+		carrierName := res.PartnerStatus.AccountName
+		for _, connectionMethod := range res.PartnerStatus.ConnectionMethods.ConnectionMethod {
+			var vehicles []string
+			for _, equipmentIdentifier := range connectionMethod.EquipmentIdentifierList.EquipmentIdentifier {
+				logger.FromContext(ctx).With(zap.String("carrier_name", carrierName),
+					zap.Stringp("carrier_uuid", params.CarrierUUID),
+					zap.String("dot_number", dotNumber),
+					zap.Any("vehicles", vehicles)).
+					Info("persisting vehicles to DB")
+				vehicles = append(vehicles, equipmentIdentifier.Identifier)
+			}
+
+			err = c.UpdateCarrierTruckMapping(ctx, carrierName, *params.CarrierUUID, dotNumber, vehicles)
+			multiErr = multierr.Append(multiErr, err)
+		}
+		return true, multiErr
+	}
+
+	return false, nil
 }
 
 func (c *controller) getDotNumber(ctx context.Context, carrierUUID string) (string, error) {
@@ -156,6 +219,11 @@ func (c *controller) getDotNumber(ctx context.Context, carrierUUID string) (stri
 }
 
 func (c controller) createOrder(ctx context.Context, order model.MacropointOrder) error {
+	eligible, err := c.isMacroPointEligible(ctx, order)
+	if err != nil || !eligible {
+		return err
+	}
+
 	req, err := c.getOrderRequest(ctx, order)
 	if err != nil {
 		return errors.Wrapf(errors.InternalError, err, "failed to create macropoint order request")
@@ -258,18 +326,20 @@ func (c *controller) getOrderRequest(
 }
 
 func (c controller) changeOrder(ctx context.Context, order model.MacropointOrder) error {
+	eligible, err := c.isMacroPointEligible(ctx, order)
+	if err != nil || !eligible {
+		return err
+	}
+
 	req, err := c.getOrderRequest(ctx, order)
 	if err != nil {
 		return errors.Wrapf(errors.InternalError, err, "failed to create macropoint order request")
 	}
 
-	response, err := c.macropointGateway.ChangeOrder(ctx, *order.OrderID, req)
+	_, err = c.macropointGateway.ChangeOrder(ctx, *order.OrderID, req)
 	if err != nil {
 		return errors.Wrapf(errors.InternalError, err, "failed to get response from macropoint ChangeOrder gateway")
 	}
-
-	order.OrderID = &response.OrderID
-	order.TrackingRequestID = &response.TrackingRequestID
 
 	return c.saveOrderParamsToDB(ctx, order.JobUUID, order)
 }
