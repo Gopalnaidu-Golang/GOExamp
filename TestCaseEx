@@ -1,0 +1,23 @@
+
+	s.macropointRepo.Let().CreateOrUpdateOrder().
+		When(func(_ context.Context, jobUUIDArg string, params *model.MacropointOrder) bool {
+			params.CreatedAt = createOrUpdateOrderParams.CreatedAt
+			params.UpdatedAt = createOrUpdateOrderParams.UpdatedAt
+			params.PickupStartTime = createOrUpdateOrderParams.PickupStartTime
+			params.PickupEndTime = createOrUpdateOrderParams.PickupEndTime
+			params.DropoffStartTime = createOrUpdateOrderParams.DropoffStartTime
+			params.DropoffEndTime = createOrUpdateOrderParams.DropoffEndTime
+			return s.Equal(jobUUID, jobUUIDArg) &&
+				s.Equal(createOrUpdateOrderParams, *params)
+		}).
+		Return(nil)
+      
+      s.macropointRepoMock.Let().CreateOrUpdateCarrier().When(func(_ context.Context, carrierUUIDs string, mpcarrier *model.MacropointCarrier) bool {
+		mpcarrier.CarrierUUID = cUUIDs
+		mpcarrier.DotNumber = &dotNumber
+		mpcarrier.CarrierName = &cName
+		mpcarrier.CreatedAt = time.Date(2021, time.Month(2), 21, 1, 10, 30, 0, time.UTC)
+		mpcarrier.UpdatedAt = time.Date(2021, time.Month(2), 21, 1, 10, 30, 0, time.UTC)
+		return s.Equal(mpcarrier.CarrierUUID, cUUIDs) &&
+			s.Equal(carrieval, mpcarrier)
+	}).Return(nil)
