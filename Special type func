@@ -1,0 +1,95 @@
+type PruneFunctionRegistry interface {
+	GetPruneFunctions(app.RequestContext) []PruneFunction
+}
+
+// NewPruneFunctionRegistry returns an instance of PruneFunctionRegistry
+func NewPruneFunctionRegistry() PruneFunctionRegistry {
+	return &pruneFunctionRegistry{}
+}
+
+// PruneFunction defines the rich supply prune function type
+type PruneFunction func(app.RequestContext, supplies.Supply) bool
+
+type pruneFunctionRegistry struct{}
+
+var (
+	_soloJitFifoPruneTypes = []PruneFunction{
+		pruneDriverRepositionVvid,
+	}
+	_soloMixFifoPruneTypes = []PruneFunction{
+		pruneDriverRepositionVvid,
+	}
+	_poolJitFifoPruneTypes = []PruneFunction{
+		pruneDriverReposition,
+	}
+	_soloPinFifoPruneTypes = []PruneFunction{
+		pruneNoDriverReposition,
+		pruneSoftmatchDriverAppVersion,
+		pruneSoftmatchDriversWithRejectedOffers,
+		pruneSoftmatchDriversWithStarpower,
+	}
+	_greedyFifoPruneTypes = []PruneFunction{
+		pruneDriverReposition,
+	}
+)
+
+func (r *pruneFunctionRegistry) GetPruneFunctions(rc app.RequestContext) []PruneFunction {
+	pruneFunctions := []PruneFunction{}
+	switch rc.RequestData().FlowType() {
+	case flowtype.SoloJITFifo:
+		pruneFunctions = _soloJitFifoPruneTypes
+	case flowtype.PoolJITFifo:
+		pruneFunctions = _poolJitFifoPruneTypes
+	case flowtype.SoloPinFifo:
+		pruneFunctions = _soloPinFifoPruneTypes
+	case flowtype.Fifo:
+		pruneFunctions = _greedyFifoPruneTypes
+	case flowtype.SoloMixFifo:
+		pruneFunctions = _soloMixFifoPruneTypes
+	}
+	return pruneFunctions
+}
+
+file-2 //calling
+// Pruner interface defines job pruning contract
+type Pruner interface {
+	Prune(app.RequestContext, []jobs.Job) []jobs.Job
+}
+
+// NewPruner returns an instance of pruner
+func NewPruner(registry functions.PruneFunctionRegistry) Pruner {
+	return &pruner{
+		registry: registry,
+	}
+}
+
+type pruner struct {
+	registry functions.PruneFunctionRegistry
+}
+
+func (p *pruner) Prune(rc app.RequestContext, richJobs []jobs.Job) []jobs.Job {
+	remainingJobs := []jobs.Job{}
+	pruneFunctions := p.registry.GetPruneFunctions(rc)
+	prunedJobUUIDs := make([]string, 0, len(richJobs))
+	for _, job := range richJobs {
+		shouldPrune := false
+		for _, prune := range pruneFunctions {
+			if prune(rc, job) {
+				shouldPrune = true
+				break
+			}
+		}
+		if shouldPrune {
+			prunedJobUUIDs = append(prunedJobUUIDs, job.UUID())
+		} else {
+			remainingJobs = append(remainingJobs, job)
+		}
+	}
+	if len(prunedJobUUIDs) > 0 {
+		rc.Logger().WithFields(log.Fields{
+			"prunedJobUUIDs": prunedJobUUIDs,
+			"numPrunedJobs":  len(prunedJobUUIDs),
+		}).Info("Rich job pruner pruned jobs")
+	}
+	return remainingJobs
+}
