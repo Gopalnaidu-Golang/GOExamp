@@ -94,3 +94,4 @@ func (p *pruner) Prune(rc app.RequestContext, richJobs []jobs.Job) []jobs.Job {
 	return remainingJobs
 }
 type JobSupplyFilterFunction func(context app.RequestContext, job jobs.Job, supply supplies.Supply) (bool, string)
+planMap := make(map[string]*idl.CandidatePlan)
