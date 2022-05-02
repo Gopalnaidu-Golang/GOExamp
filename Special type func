@@ -95,3 +95,31 @@ func (p *pruner) Prune(rc app.RequestContext, richJobs []jobs.Job) []jobs.Job {
 }
 type JobSupplyFilterFunction func(context app.RequestContext, job jobs.Job, supply supplies.Supply) (bool, string)
 planMap := make(map[string]*idl.CandidatePlan)
+var comp []*idl.CandidatePlan
+var dfs func(string, bool)
+	dfs = func(cur string, isPlan bool) {
+		if visited[cur] {
+			return
+		}
+		visited[cur] = true
+		if isPlan {
+			comp = append(comp, planMap[cur])
+		}
+		for _, next := range edges[cur] {
+			dfs(next, !isPlan)
+		}
+	}
+func constructComponents(
+	newPlans []*idl.CandidatePlan,
+	oldPlans []*idl.CandidatePlan,
+) []plans.ExecutionComponent {
+	// construct bipartite graph between plans and jobs/supplies
+	edges := make(map[string][]string)
+	allPlans := append(newPlans, oldPlans...). //** append both in single shot.
+	for _, plan := range allPlans {
+		entities := append(plan.AllJobs, plan.Supply)
+		for _, entity := range entities {
+			edges[plan.UUID] = append(edges[plan.UUID], entity)
+			edges[entity] = append(edges[entity], plan.UUID)
+		}
+	}
